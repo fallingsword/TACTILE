@@ -51,7 +51,8 @@ the rest is TACTILE's:
 
 ## Installation
 
-TACTILE needs Minecraft 1.8.9 with Minecraft Forge (11.15.1.2318 or a later 1.8.9 build).
+TACTILE needs Minecraft 1.8.9 with Minecraft Forge (11.15.1.2318 or a later 1.8.9 build). Download the jar from the
+[Releases page](https://github.com/fallingsword/TACTILE/releases).
 
 With the Modrinth App:
 1. Create an instance for Minecraft **1.8.9** with the **Forge** loader.
@@ -144,8 +145,10 @@ for the rest of the session, a chat message tells you, and the error is written 
 
 ## Reporting problems
 
-Please include the game log (`logs/latest.log` in your instance folder) and describe what you were doing. The status
-overlay (F8, detailed) shows whether TACTILE was active and why it may have handed control back to vanilla.
+Open an issue on the [Issues page](https://github.com/fallingsword/TACTILE/issues). Please include the game log
+(`logs/latest.log` in your instance folder) and describe what you were doing. The game log can contain your Windows
+user name in file paths; replace it before posting if you prefer. The status overlay (F8, detailed) shows whether
+TACTILE was active and why it may have handed control back to vanilla.
 
 ## Documentation
 
