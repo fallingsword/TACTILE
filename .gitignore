@@ -1,0 +1,28 @@
+# eclipse
+bin
+*.launch
+.settings
+.metadata
+.classpath
+.project
+
+# idea
+out
+*.ipr
+*.iws
+*.iml
+.idea
+
+# gradle
+build
+.gradle
+
+# other
+eclipse
+# game runs: recordings and logs contain local user names and paths
+run
+
+# local only: old jars (kept on this PC, published as GitHub releases instead) and editor/assistant settings
+archive
+.claude
+.vscode

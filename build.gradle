@@ -1,0 +1,234 @@
+
+// For those who want the bleeding edge
+buildscript {
+    repositories {
+        jcenter()
+        maven {
+            name = "forge"
+            url = "http://files.minecraftforge.net/maven"
+        }
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
+    }
+}
+apply plugin: 'net.minecraftforge.gradle.forge'
+
+/*
+// for people who want stable - not yet functional for MC 1.8.8 - we require the forgegradle 2.1 snapshot
+plugins {
+    id "net.minecraftforge.gradle.forge" version "2.0.2"
+}
+*/
+version = "1.0.0"
+group= "com.tactile" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
+archivesBaseName = "tactile"
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+minecraft {
+    version = "1.8.9-11.15.1.2318-1.8.9"
+    runDir = "run"
+    
+    // the mappings can be changed at any time, and must be in the following format.
+    // snapshot_YYYYMMDD   snapshot are built nightly.
+    // stable_#            stables are built at the discretion of the MCP team.
+    // Use non-default mappings at your own risk. they may not allways work.
+    // simply re-run your setup task after changing the mappings to update your workspace.
+    mappings = "stable_20"
+
+    // Load the coremod in the dev workspace (the packaged jar uses the manifest entries below).
+    clientJvmArgs += "-Dfml.coreMods.load=com.tactile.asm.TactileLoadingPlugin"
+    serverJvmArgs += "-Dfml.coreMods.load=com.tactile.asm.TactileLoadingPlugin"
+    // makeObfSourceJar = false // an Srg named sources jar is made by default. uncomment this to disable.
+}
+
+dependencies {
+    // you may put jars on which you depend on in ./libs
+    // or you may define them like so..
+    //compile "some.group:artifact:version:classifier"
+    //compile "some.group:artifact:version"
+      
+    // real examples
+    //compile 'com.mod-buildcraft:buildcraft:6.0.8:dev'  // adds buildcraft to the dev env
+    //compile 'com.googlecode.efficient-java-matrix-library:ejml:0.24' // adds ejml to the dev env
+
+    // the 'provided' configuration is for optional dependencies that exist at compile-time but might not at runtime.
+    //provided 'com.mod-buildcraft:buildcraft:6.0.8:dev'
+
+    // the deobf configurations:  'deobfCompile' and 'deobfProvided' are the same as the normal compile and provided,
+    // except that these dependencies get remapped to your current MCP mappings
+    //deobfCompile 'com.mod-buildcraft:buildcraft:6.0.8:dev'
+    //deobfProvided 'com.mod-buildcraft:buildcraft:6.0.8:dev'
+
+    // for more info...
+    // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
+    // http://www.gradle.org/docs/current/userguide/dependency_management.html
+
+}
+
+processResources
+{
+    // this will ensure that this task is redone when the versions change.
+    inputs.property "version", project.version
+    inputs.property "mcversion", project.minecraft.version
+
+    // replace stuff in mcmod.info, nothing else
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+                
+        // replace version and mcversion
+        expand 'version':project.version, 'mcversion':project.minecraft.version
+    }
+        
+    // copy everything else, thats not the mcmod.info
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+    }
+}
+
+jar {
+    // Development jar (build/libs): everything, including the developer tools. The development client loads the mod
+    // from this jar, so it must keep them. The release jar is releaseJar below.
+    manifest {
+        attributes 'FMLCorePlugin': 'com.tactile.asm.TactileLoadingPlugin',
+                   'FMLCorePluginContainsFMLMod': 'true'
+    }
+}
+
+// Release jar (build/release/tactile-<version>.jar): the reobfuscated mod without the developer tools (offline
+// harness, in-game probes, the recorder and its test world, test fixtures). ClientSetup reaches DevTools by name and
+// skips it when absent.
+task releaseJar(type: Jar, dependsOn: 'reobfJar') {
+    destinationDir = file("$buildDir/release")
+    baseName = archivesBaseName
+    version = project.version
+    from(zipTree(jar.archivePath)) {
+        exclude 'META-INF/MANIFEST.MF'
+        exclude 'com/tactile/harness/**'
+        exclude 'com/tactile/client/DevTools*', 'com/tactile/client/*Probe*', 'com/tactile/client/BaselineRunner*', 'com/tactile/client/TestWorld*'
+        exclude 'com/tactile/client/input/InputProbe*', 'com/tactile/client/input/TapTest*'
+        exclude 'com/tactile/core/Scenario*', 'com/tactile/core/Course*', 'com/tactile/core/Trace*'
+    }
+    from('LICENSE')
+    manifest {
+        attributes 'FMLCorePlugin': 'com.tactile.asm.TactileLoadingPlugin',
+                   'FMLCorePluginContainsFMLMod': 'true'
+    }
+}
+build.dependsOn releaseJar
+
+// Offline movement tests (JUnit is not in the offline cache). The core package has no Minecraft
+// dependencies, so these run without launching the game. Baseline traces recorded in-game are read
+// from run/hrm-baseline if present.
+task movementTests(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath // FG's runtimeClasspath omits main output
+    main = 'com.tactile.harness.MovementTests'
+    workingDir = project.file('run')
+    // -Ptraces=run/other-dir to gate a different recording
+    args = [project.file(project.hasProperty('traces') ? project.property('traces') : 'run/hrm-baseline').absolutePath]
+}
+
+// Gate L: live-engine traces vs offline SubstepModel. -Ptraces=dir -Psteps=N -Plead=L
+task liveValidation(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.LiveValidation'
+    workingDir = project.file('run')
+    args = [project.file(project.hasProperty('traces') ? project.property('traces') : 'run/hrm-live').absolutePath,
+            project.hasProperty('steps') ? project.property('steps') : '12',
+            project.hasProperty('lead') ? project.property('lead') : '0',
+            project.hasProperty('contacts') ? project.property('contacts') : 'GRID',
+            project.hasProperty('exact') ? project.property('exact') : 'false']
+}
+
+// Upper-rate experiment: error growth and cost far beyond the configured cap.
+task rateCapExperiment(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.RateCapExperiment'
+    workingDir = project.file('run')
+    args = [project.file('run/hrm-baseline').absolutePath]
+}
+
+// Edge-landing parity: last jump at a platform edge, vanilla vs high-res.
+task edgeLandingTest(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.EdgeLandingTest'
+    workingDir = project.file('run')
+}
+
+// EXACT (timestamp-split) input timing vs per-substep sampling.
+task exactTimingTest(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.ExactTimingTest'
+    workingDir = project.file('run')
+}
+
+// Two in-game recordings compared row by row (e.g. VANILLA vs EXACT under a potion effect).
+task traceDiff(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.TraceDiff'
+    workingDir = project.file('run')
+    args = [project.file(project.hasProperty('a') ? project.property('a') : 'run/hrm-baseline').absolutePath,
+            project.file(project.hasProperty('b') ? project.property('b') : 'run/hrm-live').absolutePath,
+            project.hasProperty('lead') ? project.property('lead') : '0']
+}
+
+// Vertical smoothness of the drawn position on a ladder (hold, climb, slide).
+task ladderViewCheck(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.LadderViewCheck'
+    workingDir = project.file('run')
+}
+
+// Height after a mid-tick jump at frame times, per rate (EXACT render path).
+task jumpLatencyCheck(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.JumpLatencyCheck'
+    workingDir = project.file('run')
+}
+
+// Timing window for pressing space on a flat sprint jump across a gap, vanilla vs each mode.
+task jumpWindowTest(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.JumpWindowTest'
+    workingDir = project.file('run')
+}
+
+// Camera per frame (ViewProbe, HRMOVE_VIEWPROBE=1): jump latency per mode, standing on slime.
+task viewAnalysis(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.ViewAnalysis'
+    workingDir = project.file('run')
+    args = [project.file('run/hrm-view/frames.csv').absolutePath]
+}
+
+// Background key poller: achieved rate and CPU per target rate (Windows).
+task pollerBench(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.PollerBench'
+    workingDir = project.file('run')
+}
+
+// Smoothness of the per-substep path at contacts (sneak edge, grazing step).
+task jitterTest(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.JitterTest'
+    workingDir = project.file('run')
+}
+
+// Analysis of the end-to-end tap test (HRMOVE_INPUTPROBE=taptest writes run/hrm-input/taps.csv).
+task tapAnalysis(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.TapAnalysis'
+    workingDir = project.file('run')
+    args = [project.file('run/hrm-input/taps.csv').absolutePath]
+}
+
+// Offline analysis of an input-probe run (HRMOVE_INPUTPROBE=auto|manual writes run/hrm-input).
+task inputAnalysis(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.InputAnalysis'
+    workingDir = project.file('run')
+    args = [project.file('run/hrm-input').absolutePath]
+}

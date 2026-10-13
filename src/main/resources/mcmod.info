@@ -1,0 +1,16 @@
+[
+{
+  "modid": "tactile",
+  "name": "TACTILE",
+  "description": "Client-side movement timing for Minecraft 1.8.9. Every press and release of a movement key takes effect at the moment it happened, instead of waiting for the next game tick (EXACT), or in steps of a rate you choose (STEPPED). Movement itself follows vanilla's rules: jump heights and distances, edges, landings, sneaking, sprinting, liquids, ladders, slime, cobwebs, flight, item use and knockback match vanilla, as measured in docs/VERIFICATION.md. Keys are read as Windows key events, only for the movement keys and only while the game has focus. Settings: Mods > TACTILE > Config. F7 cycles VANILLA / STEPPED / EXACT; F8 shows the status overlay.",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["fallingsword"],
+  "credits": "Code, tests and documentation written by Claude (Anthropic's AI model). Goals, technical direction, decisions and play-testing by fallingsword. See README.md.",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]
