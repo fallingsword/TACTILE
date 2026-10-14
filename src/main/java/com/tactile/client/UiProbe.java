@@ -27,7 +27,22 @@ public final class UiProbe
     private final Minecraft mc = Minecraft.getMinecraft();
     private int step, wait;
     private String shot;
-    private String origEnabled, origMode, origOverlay, origSource;
+    private String origEnabled, origMode, origOverlay, origSource, origChat;
+
+    /** Lines in the chat history (GuiNewChat keeps them in a private list). */
+    private int chatLines()
+    {
+        try
+        {
+            java.lang.reflect.Field f = net.minecraft.client.gui.GuiNewChat.class.getDeclaredField("chatLines");
+            f.setAccessible(true);
+            return ((java.util.List<?>)f.get(mc.ingameGUI.getChatGUI())).size();
+        }
+        catch (ReflectiveOperationException ex)
+        {
+            return -1000;
+        }
+    }
 
     public static boolean requested()
     {
@@ -116,6 +131,20 @@ public final class UiProbe
                 ClientSetup.CONFIG.save();
                 log("F7 to STEPPED saves enabled " + cat(TactileConfig.CAT_MOVEMENT).get("enabled").getString() + ", mode "
                     + cat(TactileConfig.CAT_MOVEMENT).get("mode").getString());
+                // F7 through the real key handler: it may print to chat only while chat messages are on
+                origChat = cat(TactileConfig.CAT_DISPLAY).get("chatMessages").getString();
+                for (String chat : new String[] {"false", "true"})
+                {
+                    cat(TactileConfig.CAT_DISPLAY).get("chatMessages").set(chat);
+                    ClientSetup.CONFIG.sync();
+                    int before = chatLines();
+                    net.minecraft.client.settings.KeyBinding.onTick(org.lwjgl.input.Keyboard.KEY_F7);
+                    new ClientSetup.Events().onKey(null);
+                    log("F7 with chat messages " + chat + ": chat lines added " + (chatLines() - before) + ", mode now "
+                        + ClientSetup.CONFIG.mode);
+                }
+                cat(TactileConfig.CAT_DISPLAY).get("chatMessages").set(origChat);
+                ClientSetup.CONFIG.sync();
                 break;
             case 14:
                 log("done: running " + ClientSetup.engine.runningMode());

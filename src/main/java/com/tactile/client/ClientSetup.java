@@ -98,7 +98,7 @@ public final class ClientSetup
                 CONFIG.mode = all[(CONFIG.mode.ordinal() + 1) % all.length];
                 CONFIG.save();
                 ++CONFIG.generation;
-                if (mc.thePlayer != null)
+                if (mc.thePlayer != null && CONFIG.chatMessages)
                     mc.thePlayer.addChatMessage(new ChatComponentText(EnumChatFormatting.GRAY + "[TACTILE] " + EnumChatFormatting.RESET
                         + "Movement: " + describe(CONFIG.mode, 20 * CONFIG.stepsPerTick())));
             }

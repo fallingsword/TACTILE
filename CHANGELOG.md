@@ -4,6 +4,11 @@ All notable changes to TACTILE. Each entry summarizes the development log,
 [docs/RESULTS.md](docs/RESULTS.md), which lists every measurement behind these changes. Versions before 0.4.0 were
 called "High-Resolution Movement".
 
+## 1.0.1
+
+- **Fixed:** with *Chat messages* switched off, pressing F7 still printed the new mode in chat. F7 now respects the
+  setting. A message that TACTILE has stopped because of an internal error is still always shown.
+
 ## 1.0.0 (2026-10-13)
 
 First stable release.

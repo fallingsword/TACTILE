@@ -56,7 +56,7 @@ TACTILE needs Minecraft 1.8.9 with Minecraft Forge (11.15.1.2318 or a later 1.8.
 
 With the Modrinth App:
 1. Create an instance for Minecraft **1.8.9** with the **Forge** loader.
-2. Open the instance, go to *Content*, and add `tactile-1.0.0.jar` (*Add content* > *From file*, or drop the file
+2. Open the instance, go to *Content*, and add the `tactile-<version>.jar` file (*Add content* > *From file*, or drop the file
    into the instance's `mods` folder).
 3. Start the game and press **F8**: the overlay in the top left should say `EXACT active`.
 

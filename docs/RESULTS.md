@@ -1111,3 +1111,8 @@ README, CHANGELOG, docs/VERIFICATION.md; USAGE.md reduced to configuration and d
   0/630 missed, p50 0.28-0.30 ms, 0.17 % of a core (poller 4.6 %); privacy check 0 of 20 delivered; per-tap
   residual 0.
 - The release jar now also carries LICENSE (120,150 bytes).
+
+## Phase 22: 1.0.1, chat-message setting (2026-10-13)
+
+**User bug report:** the chat-message switch did not work. Cause: F7's "Movement: ..." message ignored `chatMessages` (the engine's own state messages already respected it). Fix: F7 prints only when chat messages are on. The fault message (engine switched off after an internal error) stays unconditional.
+- UiProbe now presses F7 through the real key handler with chat messages off and on: 0 and 1 chat lines added, and the mode changed both times.
