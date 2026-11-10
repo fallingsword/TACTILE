@@ -52,6 +52,10 @@ offline account, so it cannot join online servers.
 - `HRMOVE_PLACEPROBE=1`, `HRMOVE_BRIDGEPROBE=1`: block placement while moving, and bridging.
 - `HRMOVE_FLIGHTPROBE=1`, `HRMOVE_TRANSPROBE=1`: hand-overs between TACTILE and vanilla.
 - `HRMOVE_FAULTTEST=tick|frame|move|keys`: forces an internal error to check that the game keeps running.
+  `keysinit`, `pollerinit` or `keysinit,pollerinit`: the key reader and/or the poller fail while loading (as with an
+  incompatible JNA), to check the fallback to the next key source.
+- `gradlew runClient -PjnaJar=<path>`: runs the development client with another JNA version first on the classpath,
+  as Lunar Client does (it ships JNA 5).
 - `HRMOVE_UIPROBE=1`: screenshots of the settings screens (`run/screenshots/tactile-ui-*.png`); restores every setting
   it changes.
 

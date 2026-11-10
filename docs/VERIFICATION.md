@@ -533,6 +533,20 @@ Errors were forced inside the engine on purpose (`HRMOVE_FAULTTEST`):
 | Movement hook | Same |
 | Key-event thread | Engine stayed on, reading keys once per frame instead |
 
+**Added in 1.0.3**, after a report that TACTILE switched itself off on Lunar Client
+([issue #1](https://github.com/fallingsword/TACTILE/issues/1)). According to the report, Lunar replaces Minecraft's JNA 3.4.0 (the library used
+to call Windows functions) with JNA 5, which removed a field the key reader read while loading. Tested on 2026-11-10:
+
+| Test | Result |
+|---|---|
+| Every JNA field and method TACTILE's compiled code uses (18), checked with their exact signatures against JNA 3.4.0, 4.5.2, 5.0.0 and 5.14.0 | Before the fix, 18 of 18 resolve in 3.4.0 and 4.5.2, 17 of 18 in both JNA 5 versions (`Pointer.SIZE` missing). Its replacement, `Native.POINTER_SIZE`, exists in all four |
+| Development client with JNA 5.14.0 ahead of Minecraft's JNA, old code | `NoSuchFieldError: SIZE`, the error in the report. With the new fallback, TACTILE stayed on and used the poller |
+| Same, fixed code | Key events start normally |
+| Fixed code with Minecraft's own JNA 3.4.0 | Key events start normally |
+| Key reader and poller both forced to fail while loading (`HRMOVE_FAULTTEST=keysinit,pollerinit`) | Engine stayed on, reading keys once per frame; the player walked 12.95 blocks in 3 s |
+
+Lunar Client itself was not available for testing.
+
 ## 12. Limits of this verification
 
 - **One machine, Windows only.** All measurements were made on the development machine. Other systems fall back to
@@ -582,7 +596,9 @@ gradlew traceDiff -Pa=run/v100-vanilla -Pb=run/v100-exact960 -Plead=1
   `HRMOVE_PLACEPROBE=1`, `HRMOVE_BRIDGEPROBE=1`, `HRMOVE_FLIGHTPROBE=1 HRMOVE_TOGGLETEST=4`, each with
   `HRMOVE_INPUT=SCRIPTED`.
 - Settings screen: `HRMOVE_UIPROBE=1`.
-- Forced errors: `HRMOVE_FAULTTEST=tick`, `frame`, `move` or `keys`.
+- Forced errors: `HRMOVE_FAULTTEST=tick`, `frame`, `move` or `keys`; key sources failing to load: `keysinit`,
+  `pollerinit` or `keysinit,pollerinit`.
+- Another JNA version: `gradlew runClient -PjnaJar=<path to a JNA jar>`, for example JNA 5.14.0 from Maven Central.
 - *Focus:* camera after a jump press: `HRMOVE_VIEWPROBE=1`, then `gradlew viewAnalysis`.
 - *Focus:* key reading and the menu check: `HRMOVE_INPUTPROBE=auto`, then `gradlew inputAnalysis`.
 - *Focus:* taps: `HRMOVE_INPUTPROBE=taptest`, then `gradlew tapAnalysis`.

@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.sun.jna.Memory;
+import com.sun.jna.Native;
 import com.sun.jna.Pointer;
 import com.sun.jna.WString;
 import com.sun.jna.ptr.IntByReference;
@@ -40,7 +41,9 @@ public final class RawKeyInput implements Runnable, KeySource
     private static final int RIDEV_INPUTSINK = 0x00000100;
     private static final int RI_KEY_BREAK = 1, RI_KEY_E0 = 2;
     private static final Pointer HWND_MESSAGE = Pointer.createConstant(-3L);
-    private static final int PS = Pointer.SIZE;
+    // Native.POINTER_SIZE exists in every JNA version (3.4.0 to 5.x). Pointer.SIZE was removed in JNA 5, which some
+    // launchers ship instead of Minecraft's 3.4.0 (Lunar Client: NoSuchFieldError, GitHub issue #1).
+    private static final int PS = Native.POINTER_SIZE;
     private static final int HEADER = 8 + 2 * PS; // RAWINPUTHEADER: dwType, dwSize, hDevice, wParam
 
     private static final int CAPACITY = 1 << 12;

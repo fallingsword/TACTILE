@@ -20,7 +20,7 @@ plugins {
     id "net.minecraftforge.gradle.forge" version "2.0.2"
 }
 */
-version = "1.0.2"
+version = "1.0.3"
 group= "com.tactile" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
 archivesBaseName = "tactile"
 
@@ -118,6 +118,14 @@ task releaseJar(type: Jar, dependsOn: 'reobfJar') {
     }
 }
 build.dependsOn releaseJar
+
+// Test only: gradlew runClient -PjnaJar=<path to a JNA jar> puts that JNA version ahead of Minecraft's 3.4.0 on the
+// development client's classpath, the way some launchers (Lunar Client: JNA 5) replace it.
+if (project.hasProperty('jnaJar')) {
+    afterEvaluate {
+        tasks.runClient.doFirst { classpath = files(project.property('jnaJar')) + classpath }
+    }
+}
 
 // Offline movement tests (JUnit is not in the offline cache). The core package has no Minecraft
 // dependencies, so these run without launching the game. Baseline traces recorded in-game are read

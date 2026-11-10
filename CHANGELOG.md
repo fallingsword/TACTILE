@@ -4,6 +4,16 @@ All notable changes to TACTILE. Each entry summarizes the development log,
 [docs/RESULTS.md](docs/RESULTS.md), which lists every measurement behind these changes. Versions before 0.4.0 were
 called "High-Resolution Movement".
 
+## 1.0.3
+
+- **Fixed: Lunar Client** ([issue #1](https://github.com/fallingsword/TACTILE/issues/1)). Lunar Client replaces the
+  JNA library that Minecraft uses to call Windows functions with a newer version (JNA 5), which no longer has a field
+  TACTILE read when starting the key reader. The key reader now uses a field that exists in every JNA version. Every
+  other JNA call TACTILE makes was checked against JNA 3.4.0, 4.5.2, 5.0.0 and 5.14.0.
+- **Fail-safe:** if the key reader cannot start for any reason, TACTILE now falls back to the poller, and if that
+  fails too, to reading keys once per frame. Before, an error while loading the key reader switched TACTILE off for the
+  rest of the session. The status overlay (F8, detailed) shows which key reading is in use and why.
+
 ## 1.0.2
 
 - **The physics rate setting is removed.** It never changed how you move: it only set how often the engine brings its

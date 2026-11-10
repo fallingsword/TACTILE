@@ -82,6 +82,9 @@ verification report explains in detail how ticks, jumps, collisions and drawing 
 ## Compatibility
 
 - **OptiFine:** works (tested by play).
+- **Lunar Client:** versions before 1.0.3 switched themselves off at startup on Lunar Client ([issue #1](https://github.com/fallingsword/TACTILE/issues/1)).
+  1.0.3 fixes the cause, verified in development with the newer JNA library that Lunar ships. It has not been
+  play-tested on Lunar Client itself yet.
 - **Multiplayer:** works on servers that allow client mods of this kind (tested by play on a parkour server).
   Servers still check your movement, and many forbid mods that change movement. Read the rules of the server before
   you use TACTILE there.

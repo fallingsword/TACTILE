@@ -166,6 +166,20 @@ public final class LiveEngine implements TactileHooks.MoveHandler
 
     /** Test only (HRMOVE_FAULTTEST=tick|frame|move): throw once in that entry point, 40 active ticks after start. */
     private static final String FAULT_TEST = System.getenv("HRMOVE_FAULTTEST");
+    /** keysinit, pollerinit (combinable, "keysinit,pollerinit"): the key-event source or the poller fails to load, as with an incompatible JNA. */
+    private static final String INPUT_FAULT_TEST = FAULT_TEST == null ? "" : FAULT_TEST;
+
+    /** The first reason each key source failed to start (a class that failed to load fails vaguely on later tries). */
+    private static String eventsFailure, pollerFailure;
+
+    /** A key source that failed to start: logged with its stack trace the first time, then the next source is tried. */
+    private static String inputFailure(String what, Throwable t, String first)
+    {
+        if (first != null) return first;
+        log(what + " unavailable, using the next key source: " + t);
+        t.printStackTrace();
+        return t.toString();
+    }
     private int faultTestCountdown = 40;
 
     private void faultTest(String where)
@@ -1267,31 +1281,51 @@ public final class LiveEngine implements TactileHooks.MoveHandler
                 String eventsUnavailable = null;
                 if (source != TactileConfig.InputSource.POLLER)
                 {
-                    if (RawKeyInput.canServe(vks))
+                    // A key source that cannot even load (for example a launcher's different JNA version: a LinkageError
+                    // in the class initializer) falls back to the next source instead of stopping the engine.
+                    try
                     {
-                        RawKeyInput events = new RawKeyInput(u, vks);
-                        events.setFocused(isFocused());
-                        events.start();
-                        if (events.failure() == null)
+                        if (INPUT_FAULT_TEST.contains("keysinit")) throw new NoSuchFieldError("SIZE (HRMOVE_FAULTTEST=keysinit)");
+                        if (RawKeyInput.canServe(vks))
                         {
-                            keySource = events;
-                            inputDescription = "key events";
-                            return;
+                            RawKeyInput events = new RawKeyInput(u, vks);
+                            events.setFocused(isFocused());
+                            events.start();
+                            if (events.failure() == null)
+                            {
+                                keySource = events;
+                                inputDescription = "key events";
+                                return;
+                            }
+                            eventsUnavailable = events.failure();
                         }
-                        eventsUnavailable = events.failure();
+                        else
+                        {
+                            eventsUnavailable = "a movement key is a mouse button";
+                        }
                     }
-                    else
+                    catch (Throwable t)
                     {
-                        eventsUnavailable = "a movement key is a mouse button";
+                        eventsUnavailable = eventsFailure = inputFailure("key events", t, eventsFailure);
                     }
                 }
-                long period = 1_000_000_000L / config.pollRateHz;
-                AsyncKeyPoller poller = new AsyncKeyPoller(u, vks, period, AsyncKeyPoller.spinFor(period));
-                poller.setFocused(isFocused());
-                poller.start();
-                keySource = poller;
-                inputDescription = "poller " + config.pollRateHz + " Hz"
-                    + (source == TactileConfig.InputSource.EVENTS ? " (key events unavailable: " + eventsUnavailable + ")" : "");
+                try
+                {
+                    if (INPUT_FAULT_TEST.contains("pollerinit")) throw new NoSuchFieldError("SIZE (HRMOVE_FAULTTEST=pollerinit)");
+                    long period = 1_000_000_000L / config.pollRateHz;
+                    AsyncKeyPoller poller = new AsyncKeyPoller(u, vks, period, AsyncKeyPoller.spinFor(period));
+                    poller.setFocused(isFocused());
+                    poller.start();
+                    keySource = poller;
+                    inputDescription = "poller " + config.pollRateHz + " Hz"
+                        + (eventsUnavailable != null && source != TactileConfig.InputSource.POLLER ? " (key events unavailable: " + eventsUnavailable + ")" : "");
+                }
+                catch (Throwable t)
+                {
+                    pollerFailure = inputFailure("poller", t, pollerFailure);
+                    keySource = null;
+                    inputDescription = "frame (key reading unavailable: " + pollerFailure + ")";
+                }
                 return;
             }
             inputDescription = "frame (a movement key cannot be polled asynchronously)";
