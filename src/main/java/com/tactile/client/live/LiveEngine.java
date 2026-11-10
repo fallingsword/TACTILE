@@ -378,7 +378,7 @@ public final class LiveEngine implements TactileHooks.MoveHandler
         if (config.mode == TactileConfig.Mode.VANILLA)
             return tag + EnumChatFormatting.WHITE + (config.enabled ? "VANILLA (20 Hz)" : "OFF (vanilla movement)");
         if (active && model != null)
-            return tag + EnumChatFormatting.GREEN + modeLabel() + EnumChatFormatting.GRAY + " active, physics " + model.rateHz() + " Hz, input " + inputDescription;
+            return tag + EnumChatFormatting.GREEN + modeLabel() + EnumChatFormatting.GRAY + " active, input " + inputDescription;
         return tag + EnumChatFormatting.YELLOW + config.mode + EnumChatFormatting.GRAY
             + " paused, vanilla movement: " + (fallbackReason != null ? fallbackReason : "starting");
     }

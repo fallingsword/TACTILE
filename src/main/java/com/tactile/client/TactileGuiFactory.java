@@ -71,20 +71,18 @@ public final class TactileGuiFactory implements IModGuiFactory
             return l;
         }
 
-        /** The Advanced page: mode, physics rate, key reading, poll rate (POLLER only), step rate and tap latch (STEPPED only). */
+        /** The Advanced page: mode, key reading, poll rate (POLLER only), step rate and tap latch (STEPPED only). */
         static List<IConfigElement> advancedElements()
         {
             Configuration cfg = ClientSetup.CONFIG.configuration();
             ConfigCategory movement = cfg.getCategory(TactileConfig.CAT_MOVEMENT);
             ConfigCategory input = cfg.getCategory(TactileConfig.CAT_INPUT);
-            movement.get("physicsRateHz").setConfigEntryClass(RateEntry.Physics.class);
             movement.get("stepRateHz").setConfigEntryClass(RateEntry.Step.class);
             input.get("pollRateHz").setConfigEntryClass(RateEntry.Poll.class);
             input.get("pressLatch").setConfigEntryClass(DependentEntries.LatchEntry.class);
             List<IConfigElement> advanced = new ArrayList<IConfigElement>();
             advanced.add(new ConfigElement(movement.get("mode")));
             advanced.add(new ConfigElement(movement.get("stepRateHz")));
-            advanced.add(new ConfigElement(movement.get("physicsRateHz")));
             advanced.add(new ConfigElement(input.get("inputSource")));
             advanced.add(new ConfigElement(input.get("pollRateHz")));
             advanced.add(new ConfigElement(input.get("pressLatch")));

@@ -1116,3 +1116,17 @@ README, CHANGELOG, docs/VERIFICATION.md; USAGE.md reduced to configuration and d
 
 **User bug report:** the chat-message switch did not work. Cause: F7's "Movement: ..." message ignored `chatMessages` (the engine's own state messages already respected it). Fix: F7 prints only when chat messages are on. The fault message (engine switched off after an internal error) stays unconditional.
 - UiProbe now presses F7 through the real key handler with chat messages off and on: 0 and 1 chat lines added, and the mode changed both times.
+
+## Phase 23: corner clip and the timing of collisions (2026-11-10)
+
+**Question (user):** vanilla resolves a tick's move vertically first, so a sprint-jump can clear a block's top corner where a straight path would hit it. Does TACTILE keep this, and where do its collision windows start after a mid-tick jump?
+- Code: a mid-tick jump ends the grid tick in progress at the press (collider on the movement so far, contacts committed), runs the sprint rules, applies the jump and starts a new grid tick there (`restartGridNow`). Grid ticks then end every 50 ms counted from the jump. Checkpoints and frames run the collider on the whole displacement since the grid start and commit nothing.
+- `gradlew cornerClipTest` (new): sprint-jumps at a one-block step from 3000 run-up spots. Jump at a tick start: vanilla on top 2349, corner clips 915; EXACT 20/240/960 identical outcome and clip in 3000/3000 (end positions within 3.6 cm, the D1 air-sprint residual). Mid-tick presses (+0.1..+0.9 tick, takeoff spots matched): same outcome as vanilla 3000/3000 at every timing; clip count 920-929 (observations on the game clock no longer coincide with the jump's grid).
+- Vanilla visual lag measured from the 1.0.0 ViewProbe frames (8 jumps, ~1000 FPS): the game counts the landing 49.4 ms (47.9-51.4) before the drawn feet reach the floor, which are still 0.10 blocks above it at that moment; the first drawn rise is in the first frame after the jump tick.
+- VERIFICATION.md: new subsection in section 2 (collision windows, checkpoints and frames, mid-tick jumps, fairness rules, game clock, drawing) and the corner-clip result in section 6. The physics-rate wording in README, USAGE and the report changed from "re-checks collisions" to "brings its saved state up to date".
+
+## Phase 24: physics rate fixed at 960 (1.0.2, 2026-11-10)
+
+**User decision:** the physics rate never changed movement (gate G, the 34-scenario corpus at 240 vs 960, the corner-clip test), so it should not be a setting. Fixed at 960, the rate of most validation runs, rather than 20 (only partly validated in game).
+- Removed from the Advanced page, the lang file and the overlay status line (`RateEntry.Physics` deleted). `TactileConfig.sync` sets 960 and removes `physicsRateHz` from the config file; the HIGH_RES migration still reads an old value as the step rate. `HRMOVE_RATE` and `applyForTest` still set it for tests.
+- Verified: offline gates pass. In game (UiProbe), with `physicsRateHz=240` written into the config first: every activation ran at 960 Hz, the key was gone from the file afterwards, the Advanced page shows mode, step rate, key reading, poll rate and short taps only, the overlay reads "EXACT active, input key events", and the F7 chat checks still give 0 / 1 lines.

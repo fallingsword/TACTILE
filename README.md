@@ -71,12 +71,13 @@ two copies cannot be loaded at the same time.
   changed under *Controls* > *TACTILE*.
 
 The first page has the main switch (*TACTILE movement* on or off), the overlay, and chat messages. The *Advanced
-settings* page has the mode, the step rate (STEPPED only), the physics rate, how keys are read, the poll rate (POLLER
-only) and the short-tap option (STEPPED only). Options that do not apply to your current choices are grayed out.
-Every option has a tooltip. Changes apply immediately, without restarting.
+settings* page has the mode, the step rate (STEPPED only), how keys are read, the poll rate (POLLER only) and the
+short-tap option (STEPPED only). Options that do not apply to your current choices are grayed out. Every option has a
+tooltip. Changes apply immediately, without restarting.
 
-The physics rate does not change how you move. It sets how often TACTILE re-checks collisions within a tick; the
-default (960 per second) costs a few microseconds of processor time per step.
+Earlier versions also had a *physics rate* setting. It never changed how you move, so since 1.0.2 it is fixed
+internally at 960 per second. Collisions are always resolved by vanilla's own code on vanilla's 50 ms schedule. The
+verification report explains in detail how ticks, jumps, collisions and drawing work.
 
 ## Compatibility
 
@@ -185,5 +186,5 @@ exactly.
 
 **Which mode should I use?** EXACT. Try STEPPED only if you want key timing on a fixed rhythm.
 
-**Does the physics rate matter?** No, not for movement. Leave it at the default unless you want to save a little
-processor time.
+**Where did the physics rate setting go?** It was removed in 1.0.2. Tests at every rate from 20 to 960 per second gave
+the same movement, so it is now fixed at 960 per second, the rate used for most of the testing.

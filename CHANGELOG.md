@@ -4,6 +4,15 @@ All notable changes to TACTILE. Each entry summarizes the development log,
 [docs/RESULTS.md](docs/RESULTS.md), which lists every measurement behind these changes. Versions before 0.4.0 were
 called "High-Resolution Movement".
 
+## 1.0.2
+
+- **The physics rate setting is removed.** It never changed how you move: it only set how often the engine brings its
+  internal state up to date between ticks, and tests at every rate from 20 to 960 per second gave the same movement.
+  It is now fixed at 960 per second, the rate used for most of the testing. A value from an older config file is
+  ignored and removed. The status overlay no longer shows it.
+- Docs: the verification report now explains in detail how ticks, jumps, collisions and drawing work, and includes a
+  new test showing that vanilla's corner clip (clearing a block's top corner) works the same in TACTILE.
+
 ## 1.0.1
 
 - **Fixed:** with *Chat messages* switched off, pressing F7 still printed the new mode in chat. F7 now respects the

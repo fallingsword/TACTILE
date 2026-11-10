@@ -95,18 +95,21 @@ public final class TactileConfig
         cfg.getCategory(CAT_DISPLAY).setLanguageKey("tactile.config.display").setComment("On-screen information.");
 
         enabled = enabledProp().getBoolean();
+        ConfigCategory movement = cfg.getCategory(CAT_MOVEMENT);
         boolean legacyHighRes = "HIGH_RES".equalsIgnoreCase(modeProp().getString());
         if (legacyHighRes)
         {
             // 0.8.1: HIGH_RES became STEPPED. Its input resolution was the physics rate: keep it as the step rate.
-            if (!cfg.getCategory(CAT_MOVEMENT).containsKey("stepRateHz")) stepRateProp().set(Math.max(20, rateProp().getInt()));
+            int oldRate = movement.containsKey("physicsRateHz") ? movement.get("physicsRateHz").getInt(DEFAULT_RATE_HZ) : DEFAULT_RATE_HZ;
+            if (!movement.containsKey("stepRateHz")) stepRateProp().set(Math.max(20, oldRate));
             modeProp().set(Mode.STEPPED.name());
         }
         selectedMode = Mode.valueOf(modeProp().getString());
         mode = enabled ? selectedMode : Mode.VANILLA;
-        int rate = rateProp().getInt();
-        physicsRateHz = Math.max(20, Math.min(MAX_CONFIG_RATE_HZ, 20 * Math.round(rate / 20.0F)));
-        if (physicsRateHz != rate) rateProp().set(physicsRateHz);
+        // 1.0.2: the physics rate is fixed (it never changed movement, only how often the saved state is brought up to
+        // date between ticks). A value from an older config file is ignored and removed. Tests set it with HRMOVE_RATE.
+        physicsRateHz = DEFAULT_RATE_HZ;
+        if (movement.containsKey("physicsRateHz")) movement.remove("physicsRateHz");
         stepRateHz = Math.max(MIN_STEP_RATE_HZ, Math.min(MAX_CONFIG_RATE_HZ, stepRateProp().getInt()));
 
         Property source = cfg.get(CAT_INPUT, "inputSource", "AUTO",
@@ -147,7 +150,7 @@ public final class TactileConfig
     private Property modeProp()
     {
         return cfg.get(CAT_MOVEMENT, "mode", "EXACT",
-            "EXACT (recommended): every key press and release takes effect at the exact moment it happened; the physics rate does not change movement.\n"
+            "EXACT (recommended): every key press and release takes effect at the exact moment it happened.\n"
             + "STEPPED: the same physics, but key changes take effect only in steps of the step rate below (for example 25 or 35 Hz\n"
             + "to line up a particular jump). A tap shorter than a step still counts for one step.\n"
             + "VANILLA: unmodified vanilla movement (20 Hz).\n"
@@ -162,18 +165,6 @@ public final class TactileConfig
             + MAX_CONFIG_RATE_HZ + ").\nA key change waits for the next step: up to 1 / rate (20 Hz = 50 ms, like vanilla's tick; 35 Hz = 28.6 ms).\n"
             + "Steps count from a fixed origin, so a rhythm of presses lines up the same way every time.",
             MIN_STEP_RATE_HZ, MAX_CONFIG_RATE_HZ).setLanguageKey("tactile.config.stepRateHz");
-    }
-
-    private Property rateProp()
-    {
-        return cfg.get(CAT_MOVEMENT, "physicsRateHz", DEFAULT_RATE_HZ,
-            "Internal evaluation rate (multiple of 20; slider up to 960, type up to " + MAX_CONFIG_RATE_HZ + "). It does not change how you move.\n"
-            + "Motion inside a tick is integrated in closed form, and contacts (ground, walls, landings) are committed on vanilla's\n"
-            + "20 Hz tick grid, so positions are identical at every rate (measured: within 1e-11 blocks from 20 to 960 Hz).\n"
-            + "The rate only sets how often the engine re-evaluates the collision box and the drawn path inside a tick,\n"
-            + "at a few microseconds of CPU per step (measured 2-8 us). Key timing is set by the mode (EXACT, or STEPPED's step rate), not by this.\n"
-            + "Default 960; lower it only to save CPU.",
-            20, MAX_CONFIG_RATE_HZ).setLanguageKey("tactile.config.physicsRateHz");
     }
 
     private Property overlayProp()
@@ -199,7 +190,6 @@ public final class TactileConfig
             selectedMode = mode;
             modeProp().set(mode.name());
         }
-        rateProp().set(physicsRateHz);
         stepRateProp().set(stepRateHz);
         overlayProp().set(overlay.name());
         cfg.save();

@@ -60,8 +60,12 @@ The next tick starts from those values. Two consequences matter here:
   average).
 - A key pressed and released between two ticks is never seen at all.
 
-Between ticks, the game draws frames by blending the player's position from the previous tick to the current one. So
-what you see is always up to one tick behind the last position the game has calculated.
+Between ticks, the game draws frames by blending the player's position from the previous tick to the current one.
+Because each tick calculates the next 50 ms of movement at once, the game knows where you will be up to one tick
+before the screen shows you there. The blending shows that movement during the 50 ms it covers, so it does not delay
+the start of a movement. The delay you feel after a key press comes from waiting for the next tick to read the key.
+The gap does show at events: in the game, a landing counts from the tick, while the screen still shows the player
+coming down for up to one more tick (section 2 has the measurement).
 
 Distances in this report are in blocks. One block is one meter in the game.
 
@@ -72,9 +76,10 @@ TACTILE keeps every rule of that update and changes only the timing:
 1. **Key times.** On Windows, each movement-key change arrives as an event with the time it happened. Section 10
    and the README's privacy section explain how this access is limited.
 2. **Movement between ticks.** For a given set of held keys, the per-tick update of speed and position can be written
-   as an exact formula over time. TACTILE moves the player along that formula in small steps between ticks
-   (960 per second by default), so a key change can act at its own time. When no key changes during a tick, the
-   result at the end of the tick is exactly the one vanilla's update gives.
+   as an exact formula over time. TACTILE evaluates that formula at whatever moment it needs: the time of a key
+   change, the time a frame is drawn, and regular checkpoints (960 per second by default). A key change therefore acts
+   at its own time. When no key changes during a tick, the result at the end of the tick is exactly the one vanilla's
+   update gives.
 3. **Contacts on vanilla's schedule.** Collisions with blocks are resolved by vanilla's own collision code, and the
    resulting contacts are committed when a tick ends, as in vanilla. A jump, a knockback or a flight push starts a new
    tick at the moment it happens, so its path is vanilla's path, started at that moment.
@@ -84,8 +89,62 @@ TACTILE keeps every rule of that update and changes only the timing:
 rate (1 to 1920 steps per second). The movement calculation is the same in both. **VANILLA** mode leaves the game
 untouched.
 
-The *physics rate* (default 960 per second) is how often TACTILE re-checks collisions and the drawn path within a
-tick. It is an internal setting: section 4 shows that it does not change where the player ends up.
+The *physics rate* is how often TACTILE brings its saved state up to date between ticks. Section 4 shows that it does
+not change where the player ends up, and the next section explains why it cannot. Up to 1.0.1 it was a setting
+(default 960 per second); since 1.0.2 it is fixed at 960, the rate used for most of the tests in this report. The tests still
+vary it internally to check that it has no effect.
+
+### In detail: ticks, jumps, collisions and drawing
+
+This section is for readers who want to know exactly where TACTILE's movement could differ from vanilla's.
+
+**Collision windows.** TACTILE keeps vanilla's 50 ms ticks for movement. Call each one a *collision window*. A window
+starts from the player's position and contacts at its start, and ends 50 ms later with one call to vanilla's own
+collision code on the window's whole movement. Like vanilla, that code resolves the vertical part of the move first,
+then the horizontal parts, and clips the move against every block box along the way, so a long move cannot pass
+through a block. The contacts it finds (standing, touching a wall) are committed at the end of the window, as in
+vanilla.
+
+**Checkpoints and frames.** Between the start and end of a window, every checkpoint and every drawn frame also runs
+vanilla's collision code. Each of these checks covers the whole movement from the window's start, never from the
+previous check, and none of them commits contacts. The end of the window therefore gets the same result however many
+checks came before it, which is why the physics rate cannot change movement. Each frame gets its own check at its own
+moment, so the player is never drawn inside a block. The drawn position is also capped so it never passes the point
+where the window will end.
+
+**A jump pressed mid-tick.** In vanilla a jump can only happen at a tick start. In TACTILE, a jump at any moment does
+the following:
+1. The window in progress ends at the press. Vanilla's collision code runs on the movement since that window began,
+   and its contacts are committed.
+2. Sprint rules run against those contacts, then the jump is applied, in the same order as at a vanilla tick start.
+3. A new window starts at the press. From then on, windows end every 50 ms counted from the jump.
+
+After the jump, the windows line up with the jump exactly as vanilla's ticks line up with a jump made at a tick start,
+so the jump's path and every collision along it are vanilla's, started at the press. Section 6 includes a test of
+vanilla's corner clip (clearing the top corner of a block thanks to the vertical-first order), which TACTILE
+reproduces in every case, including with mid-tick presses. A knockback or a flight push (starting to fly up or down)
+starts a new window in the same way. Windows stay aligned to the latest such event until the next one.
+
+Step 1 is the only part with no vanilla equivalent: vanilla never ends a tick early. It covers at most 50 ms of
+movement, collision-checked by the same rules. It is where the earlier timing of a press takes effect.
+
+**Rules that keep a mid-tick jump fair.** A mid-tick jump is allowed only if the player was on the ground both when
+the current window began and at the moment of the press. With only the first condition, a player who walked off an
+edge would get up to a tick of extra time to jump. With only the second, a press could fire at the instant of
+touchdown, sooner than vanilla's jump rhythm allows. Vanilla's jump cooldown also still applies.
+
+**What stays on the game clock.** Everything vanilla does at its own ticks that is not the player's movement keeps
+the game's 20 ticks per second: sending the player's position to the server, item use, and the world itself. When a
+game tick falls inside a collision window, the server receives the player's position at that moment, after collision
+with the movement so far.
+
+**Drawing.** Vanilla draws a blend between the last two tick results, so its game state runs up to one tick ahead
+of the screen. In the 1.0.0 test session, at about 1,000 frames per second, vanilla's game counted each landing about
+50 ms (49.4 ms on average, 8 jumps) before the screen showed the player reaching the floor; at the moment it counted
+the landing, the screen still showed the player 0.10 blocks above it. TACTILE draws the player's real-time position
+at the moment of each frame instead, so the game state and the screen agree. For each frame, TACTILE briefly gives
+vanilla's renderer the current position as both ends of its blend, and restores the real values right after the
+frame, so game logic never sees the substitution.
 
 ## 3. How it was verified
 
@@ -254,6 +313,27 @@ Offline, against the reference model:
   vanilla in 50 of 50.
 - Landing near an edge, then one jump press at 9 timings around the touchdown, 225 combinations: 0 jumps lost where
   vanilla jumps, 0 extra jumps where vanilla does not.
+
+### Clearing the corner of a block (corner clip)
+
+Because vanilla resolves each tick's move vertically first, a jump that rises past a block's top within one tick
+clears its corner even where a straight line between the tick positions would have hit the block. Offline (run
+2026-11-10, on the engine code of 1.0.1, which has the same movement code as 1.0.0): sprint-jumps at a one-block step
+from 3,000 run-up positions, 1 mm apart. A "corner clip" counts a tick that starts below the top and in front of the
+face and ends above the top and past it, where a straight line between the two would have crossed the face below the
+top.
+
+| Jump | Ended on top of the step | Corner clips | Same outcome as vanilla |
+|---|---|---|---|
+| VANILLA, at a tick start | 2,349 | 915 | |
+| EXACT at 20, 240 and 960 per second, at a tick start | 2,349 | 915 | 3,000 of 3,000, including every corner clip |
+| EXACT 960, pressed 0.1 to 0.9 of a tick after a tick start | 2,349 at every timing | 920-929 | 3,000 of 3,000 at every timing |
+
+For the mid-tick presses, the run-up was shifted back by the extra sprint distance so each jump starts from the same
+spot as the vanilla jump it is compared with. The corner-clip count varies by about 1 % because the test observes
+positions on the game clock, which no longer coincides with the jump's own windows; whether the jump ends on top is
+identical. End positions differed by up to 3.6 cm in runs that hit the step's face: that is the mid-air sprint
+difference D1, and it never changed the outcome.
 
 ### Hand-overs and settings
 
@@ -478,7 +558,7 @@ key presses and need the game window to stay in front.
 **Offline checks (section 4):**
 ```
 gradlew movementTests -Ptraces=run/v100-vanilla
-gradlew edgeLandingTest jumpWindowTest jitterTest exactTimingTest ladderViewCheck jumpLatencyCheck pollerBench
+gradlew edgeLandingTest jumpWindowTest jitterTest exactTimingTest ladderViewCheck jumpLatencyCheck pollerBench cornerClipTest
 ```
 
 **Recorded scenarios (section 5).** Set the environment variables, then run `gradlew runClient`:

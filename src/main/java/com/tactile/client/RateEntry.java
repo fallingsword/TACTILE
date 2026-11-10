@@ -12,8 +12,8 @@ import net.minecraftforge.fml.client.config.IConfigElement;
 
 /**
  * A rate control: a slider over the common range and a box for typing any value up to the cap. Values snap to a
- * multiple of the step. {@link Physics}: the physics rate (20–960 on the slider, up to 1920 typed, steps of 20).
- * {@link Poll}: the key poll rate (250–8000, steps of 250), grayed out unless Key reading is POLLER.
+ * multiple of the step. {@link Step}: STEPPED's step rate (20–240 on the slider, 1–1920 typed), grayed out unless the
+ * mode is STEPPED. {@link Poll}: the key poll rate (250–8000, steps of 250), grayed out unless Key reading is POLLER.
  */
 public abstract class RateEntry extends GuiConfigEntries.ListEntryBase implements GuiSlider.ISlider
 {
@@ -24,15 +24,6 @@ public abstract class RateEntry extends GuiConfigEntries.ListEntryBase implement
     private final GuiTextField box;
     private final int before;
     private int value;
-
-    /** Physics steps per second (multiple of 20). */
-    public static final class Physics extends RateEntry
-    {
-        public Physics(GuiConfig owningScreen, GuiConfigEntries owningEntryList, IConfigElement configElement)
-        {
-            super(owningScreen, owningEntryList, configElement, 20, 20, 20, 960, TactileConfig.MAX_CONFIG_RATE_HZ);
-        }
-    }
 
     /** Key poll rate; only used by the poller. */
     public static final class Poll extends RateEntry

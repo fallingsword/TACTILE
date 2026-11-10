@@ -7,22 +7,21 @@ This page covers the configuration file and the developer tools. For installing 
 
 `config/tactile.cfg` in the game folder. Every option can also be changed on the settings screen (*Mods* > *TACTILE*
 > *Config*). Changes made on the settings screen apply from the next game tick, without a restart. Older configuration
-files are migrated automatically: `hrmovement.cfg` (before 0.4.0), `inputSource=ASYNC` (before 0.7.2) and
-`mode=HIGH_RES` (before 0.8.1).
+files are migrated automatically: `hrmovement.cfg` (before 0.4.0), `inputSource=ASYNC` (before 0.7.2), `mode=HIGH_RES` (before 0.8.1) and
+`physicsRateHz` (removed in 1.0.2; an old value is ignored and deleted from the file).
 
 | Option | Default | Meaning |
 |---|---|---|
 | `enabled` | true | The main switch (*TACTILE movement*). When off, movement is vanilla whatever the mode. |
 | `mode` | EXACT | EXACT: each key change takes effect at the moment it happened. STEPPED: the same physics, but key changes take effect only in steps of `stepRateHz`. VANILLA: unmodified game behavior. |
 | `stepRateHz` | 20 | STEPPED only. Steps per second, any whole number from 1 to 1920 (the slider covers 20 to 240). A key change waits for the next step, at most 1/rate seconds. |
-| `physicsRateHz` | 960 | How often per second the engine re-checks collisions and the drawn path inside a tick (20 to 1920, in steps of 20). It does not change movement: positions agree to within about 1e-11 blocks across rates. Higher values cost slightly more processor time. |
 | `inputSource` | AUTO | AUTO: Windows key events, falling back to the poller, then to reading once per frame. EVENTS: key events (falls back to the poller if a movement key is bound to a mouse button). POLLER: a background thread checks the movement keys at `pollRateHz`. FRAME: once per rendered frame. |
 | `pollRateHz` | 2000 | POLLER only, 250 to 8000. Key changes are timed to within 1/rate. Above 2000 per second the poller must busy-wait, which occupies one processor core. |
 | `pressLatch` | true | STEPPED only. A tap that starts and ends between two steps still counts, for one step. |
 | `overlay` | OFF | Status overlay: OFF, SIMPLE or DETAILED (F8 cycles it). |
 | `chatMessages` | false | Show a chat message when the movement mode changes or movement falls back to vanilla. |
 
-The DETAILED overlay shows the active mode, the physics rate, how keys are read, and performance figures (time per
+The DETAILED overlay shows the active mode, how keys are read, and performance figures (time per
 step, frame times, corrections received from the server).
 
 ## Developer tools
@@ -35,7 +34,7 @@ offline account, so it cannot join online servers.
 - `gradlew movementTests --offline`: the main test suite (gates A to G and S, and the comparison reports). It reads
   recordings from `run/hrm-baseline`, or from `-Ptraces=<folder>`.
 - `gradlew edgeLandingTest`, `jumpWindowTest`, `jitterTest`, `ladderViewCheck`, `jumpLatencyCheck`,
-  `exactTimingTest`, `pollerBench`.
+  `exactTimingTest`, `pollerBench`, `cornerClipTest`.
 - `gradlew liveValidation -Ptraces=<folder> -Psteps=12 -Plead=1 -Pexact=true`: compares in-game recordings made with
   the engine against the offline model.
 - `gradlew traceDiff -Pa=<folder> -Pb=<folder> -Plead=1`: compares two sets of recordings tick by tick.
@@ -44,7 +43,7 @@ offline account, so it cannot join online servers.
 - `HRMOVE_BASELINE=1`: records the scenarios with vanilla movement into `run/hrm-baseline`. Options:
   `HRMOVE_BASELINE_SET=all|medium|climb|items|fallback`, `HRMOVE_BASELINE_ONLY=<names>`, `HRMOVE_BASELINE_DIR=<folder>`,
   `HRMOVE_BASELINE_EFFECT=<potion:amplifier>`, `HRMOVE_BASELINE_FOOD=<level>`.
-- Add `HRMOVE_MODE=EXACT HRMOVE_RATE=240 HRMOVE_INPUT=SCRIPTED` to record with the engine
+- Add `HRMOVE_MODE=EXACT HRMOVE_RATE=240 HRMOVE_INPUT=SCRIPTED` to record with the engine (`HRMOVE_RATE` sets the internal physics rate, fixed at 960 for players, so the tests can check that it changes nothing)
   (`HRMOVE_MODE=STEPPED HRMOVE_STEP=35` for STEPPED).
 
 **Probes in the game:**
