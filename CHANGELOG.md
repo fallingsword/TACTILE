@@ -13,8 +13,13 @@ called "High-Resolution Movement".
 - **Fail-safe:** if the key reader cannot start for any reason, TACTILE now falls back to the poller, and if that
   fails too, to reading keys once per frame. Before, an error while loading the key reader switched TACTILE off for the
   rest of the session. The status overlay (F8, detailed) shows which key reading is in use and why.
+- Play-tested on Lunar Client.
+- Docs corrections:
+  - The "ledge corner" difference (D2) is withdrawn. A tick-by-tick replay showed it was the mid-air sprint
+    difference (D1), whose range is now 0.6 to 5 cm (11 cm on soul sand).
+  - The explanation of the remaining 1.8 ms display delay in EXACT was replaced with a measured breakdown.
 
-## 1.0.2
+## 1.0.2 (2026-11-10)
 
 - **The physics rate setting is removed.** It never changed how you move: it only set how often the engine brings its
   internal state up to date between ticks, and tests at every rate from 20 to 960 per second gave the same movement.
@@ -23,7 +28,7 @@ called "High-Resolution Movement".
 - Docs: the verification report now explains in detail how ticks, jumps, collisions and drawing work, and includes a
   new test showing that vanilla's corner clip (clearing a block's top corner) works the same in TACTILE.
 
-## 1.0.1
+## 1.0.1 (2026-10-14)
 
 - **Fixed:** with *Chat messages* switched off, pressing F7 still printed the new mode in chat. F7 now respects the
   setting. A message that TACTILE has stopped because of an internal error is still always shown.

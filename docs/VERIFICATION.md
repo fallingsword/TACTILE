@@ -1,8 +1,8 @@
-# TACTILE 1.0.0: verification report
+# TACTILE verification report
 
 This report explains how TACTILE was compared with the unmodified game, what was measured, and every known
 difference. All numbers in the results sections come from one test session on 2026-10-13 with the 1.0.0 build,
-unless a section says otherwise.
+unless a section says otherwise. Later additions, up to version 1.0.3, give their own date and version.
 
 ## Summary
 
@@ -14,7 +14,8 @@ The short answer is no, apart from a few small, understood cases.
 - We recorded the real, unmodified game doing 34 different things: walking, sprinting, jumping, sneaking at edges,
   stairs, water, lava, ladders, vines, soul sand, slime, cobwebs, creative flight, eating, bows and sword blocking.
   We then played exactly the same key presses with TACTILE switched on. In 28 of the 34 the result was identical to
-  the last digit. The other six differ by between 6 mm and 11 cm, for the reasons listed below.
+  the last digit. The other six differ by between 6 mm and 11 cm, all for the same reason: a change of sprint in
+  mid-air takes effect sooner (D1 in section 8).
 - Getting hit by a zombie or a player pushes you exactly as far as in vanilla (to six decimal places), and you see the
   push start about 3 ms after it arrives instead of 27-40 ms.
 - When you press jump, you see the jump start about 2 ms later. In vanilla it is about 30 ms on average, and up to
@@ -77,7 +78,7 @@ TACTILE keeps every rule of that update and changes only the timing:
    and the README's privacy section explain how this access is limited.
 2. **Movement between ticks.** For a given set of held keys, the per-tick update of speed and position can be written
    as an exact formula over time. TACTILE evaluates that formula at whatever moment it needs: the time of a key
-   change, the time a frame is drawn, and regular checkpoints (960 per second by default). A key change therefore acts
+   change, the time a frame is drawn, and regular checkpoints (960 per second). A key change therefore acts
    at its own time. When no key changes during a tick, the result at the end of the tick is exactly the one vanilla's
    update gives.
 3. **Contacts on vanilla's schedule.** Collisions with blocks are resolved by vanilla's own collision code, and the
@@ -109,8 +110,13 @@ vanilla.
 vanilla's collision code. Each of these checks covers the whole movement from the window's start, never from the
 previous check, and none of them commits contacts. The end of the window therefore gets the same result however many
 checks came before it, which is why the physics rate cannot change movement. Each frame gets its own check at its own
-moment, so the player is never drawn inside a block. The drawn position is also capped so it never passes the point
-where the window will end.
+moment. On every axis where the window's collision will stop the player (a wall, a floor, a ceiling), the drawn
+position never passes that stopping point, so the player is not drawn inside a wall. On an axis the collision does not
+limit, the drawn position follows the straight path between the window's start and end. So when a jump clears the top
+corner of a block thanks to the vertical-first order, the drawn position can briefly cut through that corner, exactly
+as vanilla's own blended drawing does. This is how the code is built rather than a separate measurement; the related
+measurements are the smoothness tests (`jitterTest`, `ladderViewCheck`, at 240 and 960 checks per second), which found
+no backward movement of the drawn position at edges, steps and ladders.
 
 **A jump pressed mid-tick.** In vanilla a jump can only happen at a tick start. In TACTILE, a jump at any moment does
 the following:
@@ -125,8 +131,18 @@ vanilla's corner clip (clearing the top corner of a block thanks to the vertical
 reproduces in every case, including with mid-tick presses. A knockback or a flight push (starting to fly up or down)
 starts a new window in the same way. Windows stay aligned to the latest such event until the next one.
 
-Step 1 is the only part with no vanilla equivalent: vanilla never ends a tick early. It covers at most 50 ms of
-movement, collision-checked by the same rules. It is where the earlier timing of a press takes effect.
+Step 1 is the only part of a mid-tick jump with no vanilla equivalent: vanilla never ends a tick early. It covers at
+most 50 ms of movement, collision-checked by the same rules. It is where the earlier timing of a press takes effect.
+
+**Other key changes during a window.** A key that changes in the middle of a window (anything other than a jump)
+does not start a new window. The movement formula changes from that moment, and the window still ends with one
+collision check on its whole movement. Vanilla has no equivalent either, since it would apply the key at the next
+tick; this is the purpose of the mod.
+
+**The one rule TACTILE applies sooner.** When sprint starts or stops in mid-air (for example because the player runs
+into a wall), vanilla changes the air acceleration only from the next tick, while TACTILE changes it at once. This is
+D1 in section 8, and it is the cause of every difference found in the recorded scenarios. Apart from these timing
+points, the rules are vanilla's.
 
 **Rules that keep a mid-tick jump fair.** A mid-tick jump is allowed only if the player was on the ground both when
 the current window began and at the moment of the press. With only the first condition, a player who walked off an
@@ -172,14 +188,16 @@ frame, so game logic never sees the substitution.
 - **Not acceptable:** any difference from vanilla's movement rules. With the same key timing, positions, speeds,
   contacts and timers must equal vanilla's, apart from floating-point rounding (below 1e-9 blocks).
 - **Acceptable:** differences that come only from the finer timing (a key press or a contact change taking effect
-  sooner than the next tick), and the two cases accepted by the project owner (section 8), each with a measured upper
+  sooner than the next tick), and the one case accepted by the project owner (D1 in section 8), with a measured upper
   bound.
 
 ### Test setup
 
 - Windows 11, the development machine, Minecraft 1.8.9 with Forge 11.15.1.2318, in a flat test world generated by
   the recorder.
-- All runs in sections 4 to 11 used the 1.0.0 build. The engine in the development build used for recording is the
+- All runs in sections 4 to 11 used the 1.0.0 build, except where a section names another version and date: the
+  corner-clip test in section 6 (1.0.1), the re-examination of D2 in section 8, and the 1.0.3 tests in section 11. The
+  movement code is the same in all of these versions. The engine in the development build used for recording is the
   same code as in the release jar; the release jar only leaves out the test tools (section 12).
 - Simulated key presses for the timing tests were injected through Windows while the game window was in front.
   Latencies are measured from the moment Windows received the press, so the keyboard's own delay is not included.
@@ -232,7 +250,7 @@ and STEPPED at 20 and 35 steps per second. The columns are:
 | wall_scrape | Sprint along and into a wall | 50 | identical | identical | 0 |
 | slab_steps | Walk up half-slabs | 50 | identical | identical | 0 |
 | sneak_edge | Sneak to the edge of a block | 75 | identical | identical | 0 |
-| jump_onto_block | Jump up onto a one-block step | 44 | identical | identical | 0.0059 (D2) |
+| jump_onto_block | Jump up onto a one-block step | 44 | identical | identical | 0.0059 (D1) |
 | head_hitter | Jump under a low ceiling | 70 | identical | identical | 0 |
 | turning_jumps | Sprint jumps while turning | 75 | identical | identical | 0 |
 | double_tap_sprint | Start sprinting by double-tapping forward | 38 | identical | identical | 0 |
@@ -383,10 +401,16 @@ than before. "Delay" compares the drawn jump with an ideal jump that starts at t
 | STEPPED, 35 steps per second | 15.1 ms | 13.7 ms (2.5-20.7) |
 | STEPPED, 60 steps per second | 9.0 ms | 7.6 ms (2.2-17.4) |
 | EXACT, physics rate 20 | 4.5 ms | 1.8 ms (1.7-2.3) |
-| EXACT, physics rate 960 (default) | 3.2 ms | 1.8 ms (1.7-1.9) |
+| EXACT, physics rate 960 (fixed since 1.0.2) | 3.2 ms | 1.8 ms (1.7-1.9) |
 
-The remaining 1.8 ms in EXACT is the time to the next drawn frame. In STEPPED the delay is the wait for the next step,
-on average half a step.
+The remaining 1.8 ms in EXACT has two parts, measured on the engine's own clock in all 16 EXACT jumps:
+- about 0.25 ms for the key press to reach TACTILE;
+- about 1.5 ms between the start of a frame, when the position it shows is computed, and the moment the test recorded
+  the frame, after the world had been drawn. This part follows the time taken to draw each frame (1.6 to 1.7 ms per
+  frame in this test). Vanilla also computes each frame's position when the frame starts.
+
+The time for a finished image to reach the screen is not part of this measurement, in any mode. In STEPPED the delay
+is mainly the wait for the next step, on average half a step.
 
 Standing on slime (a reported camera vibration): the camera's feet height and eye height did not move in any mode,
 and the small tilt that remains (0.157 degrees) is vanilla's own view bobbing, equal in every mode.
@@ -428,20 +452,27 @@ tap length; "residual" compares each tap with the prediction for the length the 
 ### Accepted by the project owner
 
 **D1. Sprint starting or stopping in mid-air.** In vanilla, a change of sprint state affects air acceleration from
-the next tick. TACTILE applies it from the moment it happens. This applies when sprint starts again in the air (for
-example after hitting a wall or a stair face), and when it stops in the air (for example when you start eating or
-stop blocking).
-- Size: 9.4 mm (eat_jump_doubletap) to 4.8 cm (sword_block_jump) in the recorded scenarios. Soul sand enlarges it to
+the next tick. TACTILE applies it from the moment it happens. This applies when sprint stops in the air (for example
+when you run into a wall or the face of a block, start eating or start blocking), and when it starts again (for
+example after leaving the wall, or when you stop eating or blocking while still holding forward and sprint).
+- Size: 5.9 mm (jump_onto_block) to 4.8 cm (sword_block_jump) in the recorded scenarios. Soul sand enlarges it to
   10.7 cm, because its slowdown is applied per block and the player reaches the next block one tick sooner. In an
   offline test of 400 jumps onto a step, 175 showed it, by at most 4.2 cm.
 - Cause: finer timing of a rule vanilla only checks once per tick. The rule itself is unchanged.
 - Decision: accepted (2026-10-12), as a difference that comes from the higher time resolution.
 
-**D2. Clipping the corner of a ledge during a jump.** Vanilla moves the player up and then forward within each tick.
-TACTILE's path between ticks is smooth, so when the player rises past the top corner of a block while moving towards
-it, the corner is met at a slightly different point.
-- Size: at most 6 mm (5.9 mm in jump_onto_block).
-- Decision: accepted.
+**D2 (withdrawn): clipping the corner of a ledge.** Earlier editions of this report listed a separate difference of up
+to 6 mm when jumping onto a block, blamed on TACTILE's smooth path between ticks. A tick-by-tick replay of
+jump_onto_block (offline, 2026-11-12) showed that this was D1:
+- Up to the tick where the player runs into the step's face, vanilla and TACTILE are identical, including the
+  collision with the face (both stop at the same point in the same tick).
+- Running into the face ends sprint. On the next tick, vanilla still uses the sprinting air acceleration for one more
+  move, and TACTILE uses the walking one at once. That single tick accounts for the whole 5.9 mm (0.006 × 0.98 of a
+  block), which then shrinks as sprint resumes.
+
+The label dated from an older version of the engine that did handle corners differently (by about 0.15 blocks); later
+versions removed that difference, and the small residual kept its old name. The corner-clip test in section 6 confirms
+that collisions at corners match vanilla in every tested case.
 
 ### By design: timing
 
@@ -471,6 +502,8 @@ None.
 
 | Version | Problem | Found by |
 |---|---|---|
+| 1.0.3 | On Lunar Client, which ships a newer JNA library, the key reader failed to load and TACTILE switched itself off. The key reader now uses a field present in every JNA version, and a key reader that cannot start falls back to the poller, then to reading keys once per frame (section 11). | User report ([issue #1](https://github.com/fallingsword/TACTILE/issues/1)) |
+| 1.0.1 | With chat messages switched off, F7 still printed the new mode in chat. | Play-testing |
 | 1.0.0 | A jump pressed mid-tick at the moment of hitting a wall while sprinting kept the sprint-jump boost briefly; the result depended on the physics rate by up to 2.4 mm. The sprint rules now run before such a jump, as in vanilla. | STEPPED rate check (gate S) |
 | 0.8.1 | Knockback pushed the player about 35 % too far: vanilla's ground friction on the first knockback tick was skipped. A knockback now starts a full tick when it arrives. | Hit test |
 | 0.7.3 | STEPPED (then called HIGH_RES) at low rates drew the camera one step late. | Camera timing test |
@@ -496,7 +529,7 @@ Measured in the game during the scenario recordings of section 5 (about 2,600 ti
 | STEPPED 20, physics rate 960 | 3.3 µs | 7 / 25 / 212 µs | 1.37 / 3.02 ms |
 | STEPPED 35, physics rate 960 | 3.3 µs | 6 / 22 / 235 µs | 1.39 / 2.36 ms |
 
-At the default 960 steps per second, the engine uses about 3 ms of processor time per second of play (0.3 % of one
+At 960 steps per second (the fixed rate since 1.0.2), the engine uses about 3 ms of processor time per second of play (0.3 % of one
 core). A step at 240 per second costs more than one at 960 because it covers more distance, so its collision checks
 consider more blocks.
 
@@ -545,7 +578,7 @@ to call Windows functions) with JNA 5, which removed a field the key reader read
 | Fixed code with Minecraft's own JNA 3.4.0 | Key events start normally |
 | Key reader and poller both forced to fail while loading (`HRMOVE_FAULTTEST=keysinit,pollerinit`) | Engine stayed on, reading keys once per frame; the player walked 12.95 blocks in 3 s |
 
-Lunar Client itself was not available for testing.
+After these tests, the project owner play-tested 1.0.3 on Lunar Client and confirmed that it works.
 
 ## 12. Limits of this verification
 
@@ -561,7 +594,8 @@ Lunar Client itself was not available for testing.
 - **Servers.** Play-testing on a multiplayer parkour server showed no problems. Servers with strict movement checks,
   such as Hypixel, pull the player back repeatedly while TACTILE is on. No server's movement checks were tested
   systematically.
-- **Other mods.** OptiFine was play-tested. No other mods were tested.
+- **Other mods and clients.** OptiFine was play-tested, and 1.0.3 was play-tested on Lunar Client. No other mods or
+  clients were tested.
 
 ## 13. Reproducing the results
 
@@ -569,13 +603,10 @@ You need the source code, JDK 8, and Windows. Run every command from the project
 first build. The in-game recordings open a game window, run by themselves and close; those marked *focus* simulate
 key presses and need the game window to stay in front.
 
-**Offline checks (section 4):**
-```
-gradlew movementTests -Ptraces=run/v100-vanilla
-gradlew edgeLandingTest jumpWindowTest jitterTest exactTimingTest ladderViewCheck jumpLatencyCheck pollerBench cornerClipTest
-```
+The recordings are not part of the repository (section 3, "Raw data"), so make them first. The main test suite
+compares the reference model with them; without recordings it stops with "FAIL: no traces found".
 
-**Recorded scenarios (section 5).** Set the environment variables, then run `gradlew runClient`:
+**1. Recorded scenarios (section 5).** Set the environment variables, then run `gradlew runClient`:
 
 | Run | Environment variables |
 |---|---|
@@ -591,7 +622,14 @@ gradlew traceDiff -Pa=run/v100-vanilla -Pb=run/v100-exact960 -Plead=1
 ```
 (`-Psteps` is the physics rate divided by 20: 12 for 240, 48 for 960.)
 
-**In-game tests (sections 6, 7, 10, 11):**
+**2. Offline checks (section 4 and parts of sections 6 and 7),** using the vanilla recordings from step 1:
+```
+gradlew movementTests -Ptraces=run/v100-vanilla
+gradlew edgeLandingTest jumpWindowTest jitterTest exactTimingTest ladderViewCheck jumpLatencyCheck pollerBench cornerClipTest
+```
+The tests in the second line do not need recordings.
+
+**3. In-game tests (sections 6, 7, 10, 11):**
 - Hits, pillaring, placement, bridging, hand-overs: `HRMOVE_HITPROBE=1`, `HRMOVE_PILLARPROBE=1`,
   `HRMOVE_PLACEPROBE=1`, `HRMOVE_BRIDGEPROBE=1`, `HRMOVE_FLIGHTPROBE=1 HRMOVE_TOGGLETEST=4`, each with
   `HRMOVE_INPUT=SCRIPTED`.

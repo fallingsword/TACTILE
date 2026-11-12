@@ -15,7 +15,7 @@ files are migrated automatically: `hrmovement.cfg` (before 0.4.0), `inputSource=
 | `enabled` | true | The main switch (*TACTILE movement*). When off, movement is vanilla whatever the mode. |
 | `mode` | EXACT | EXACT: each key change takes effect at the moment it happened. STEPPED: the same physics, but key changes take effect only in steps of `stepRateHz`. VANILLA: unmodified game behavior. |
 | `stepRateHz` | 20 | STEPPED only. Steps per second, any whole number from 1 to 1920 (the slider covers 20 to 240). A key change waits for the next step, at most 1/rate seconds. |
-| `inputSource` | AUTO | AUTO: Windows key events, falling back to the poller, then to reading once per frame. EVENTS: key events (falls back to the poller if a movement key is bound to a mouse button). POLLER: a background thread checks the movement keys at `pollRateHz`. FRAME: once per rendered frame. |
+| `inputSource` | AUTO | AUTO: Windows key events, falling back to the poller, then to reading once per frame. EVENTS: key events; falls back to the poller if a movement key is bound to a mouse button or the key reader cannot start. POLLER: a background thread checks the movement keys at `pollRateHz`. FRAME: once per rendered frame. In every case, a source that cannot start falls back to the next one (poller, then once per frame); the detailed overlay shows which one is in use and why. |
 | `pollRateHz` | 2000 | POLLER only, 250 to 8000. Key changes are timed to within 1/rate. Above 2000 per second the poller must busy-wait, which occupies one processor core. |
 | `pressLatch` | true | STEPPED only. A tap that starts and ends between two steps still counts, for one step. |
 | `overlay` | OFF | Status overlay: OFF, SIMPLE or DETAILED (F8 cycles it). |
@@ -68,5 +68,5 @@ The probes above use scripted input (add `HRMOVE_INPUT=SCRIPTED`, except for the
 - `HRMOVE_INPUTPROBE=taptest`, then `gradlew tapAnalysis`: distance moved per tap length.
 
 The code is in the `com.tactile` package. The environment variables (`HRMOVE_*`) and the recordings under `run/hrm-*`
-keep the names of earlier versions, so the commands in RESULTS.md stay valid. Jars of earlier versions are in
-`archive/releases/`.
+keep the names of earlier versions, so the commands in RESULTS.md stay valid. Jars of 1.0.0 and later are on the
+[Releases page](https://github.com/fallingsword/TACTILE/releases); earlier development versions were not published.

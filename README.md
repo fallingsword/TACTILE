@@ -82,9 +82,8 @@ verification report explains in detail how ticks, jumps, collisions and drawing 
 ## Compatibility
 
 - **OptiFine:** works (tested by play).
-- **Lunar Client:** versions before 1.0.3 switched themselves off at startup on Lunar Client ([issue #1](https://github.com/fallingsword/TACTILE/issues/1)).
-  1.0.3 fixes the cause, verified in development with the newer JNA library that Lunar ships. It has not been
-  play-tested on Lunar Client itself yet.
+- **Lunar Client:** works from 1.0.3 (tested by play). Earlier versions switched themselves off at startup on Lunar
+  Client ([issue #1](https://github.com/fallingsword/TACTILE/issues/1)).
 - **Multiplayer:** works on servers that allow client mods of this kind (tested by play on a parkour server).
   Servers still check your movement, and many forbid mods that change movement. Read the rules of the server before
   you use TACTILE there.
@@ -101,10 +100,9 @@ staircases, water, lava, ladders, vines, soul sand, slime, cobwebs, creative fli
 and in tests of getting hit, building straight up, placing blocks and bridging. With the same key timing, the results
 match vanilla exactly except for these known cases:
 
-- **Sprint starting or stopping in mid-air** (for example, coming off a wall, or starting to eat while airborne).
-  TACTILE applies the change in air acceleration immediately; vanilla applies it one tick later. The effect was 1 to
-  5 cm in the tested cases, and 11 cm on soul sand, which enlarges it.
-- **Clipping the corner of a ledge during a jump:** up to 6 mm.
+- **Sprint starting or stopping in mid-air** (for example, running into a wall or the side of a block during a jump,
+  or starting to eat while airborne). TACTILE applies the change in air acceleration immediately; vanilla applies it
+  one tick later. The effect was 0.6 to 5 cm in the tested cases, and 11 cm on soul sand, which enlarges it.
 - **Earlier response.** Because a press is no longer delayed to the next tick, some timing windows change shape. For
   example, on a flat four-block sprint jump the latest moment you can press jump is identical to vanilla, while the
   earliest is about 24 ms later, because vanilla's tick delay forgives presses that come slightly too early.
@@ -145,7 +143,9 @@ of the release jar, and even in development they only act while the game window 
 TACTILE switches to vanilla movement automatically, with a smooth camera transition, while you are riding an entity,
 flying on a ladder, in spectator mode, or under a potion effect added by another mod. It switches back as soon as the
 situation ends. If anything inside TACTILE fails unexpectedly, the game keeps running: movement switches to vanilla
-for the rest of the session, a chat message tells you, and the error is written to the game's log.
+for the rest of the session, a chat message tells you, and the error is written to the game's log. The one exception
+is the key reader: if it cannot start or stops working, TACTILE stays on and reads keys another way (the poller, or
+once per frame), and the detailed overlay (F8) shows which.
 
 ## Reporting problems
 
@@ -173,7 +173,9 @@ gradlew build --offline
 ```
 
 The release jar is written to `build/release/tactile-<version>.jar`. The jar in `build/libs` is a development build
-that also contains the test tools. `gradlew movementTests` runs the offline test suite.
+that also contains the test tools. `gradlew movementTests` runs the offline test suite. It
+compares against recordings of the real game, which are not included in the repository, so make them first; section
+13 of the verification report explains how.
 
 ## License
 
