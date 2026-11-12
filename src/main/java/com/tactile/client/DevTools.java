@@ -34,6 +34,7 @@ public final class DevTools
         if (ViewProbe.requested()) MinecraftForge.EVENT_BUS.register(new ViewProbe());
         if (HitProbe.requested()) MinecraftForge.EVENT_BUS.register(new HitProbe());
         if (FaultProbe.requested()) MinecraftForge.EVENT_BUS.register(new FaultProbe());
+        if (FallProbe.requested()) MinecraftForge.EVENT_BUS.register(new FallProbe());
         String probe = InputProbe.mode();
         if (probe.equals("taptest"))
         {

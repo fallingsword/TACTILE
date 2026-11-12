@@ -19,6 +19,7 @@ import com.tactile.client.input.Win32;
 import com.tactile.core.Box;
 import com.tactile.core.InputTimeline;
 import com.tactile.core.PlayerState;
+import com.tactile.core.ServerShadow;
 import com.tactile.core.SubstepModel;
 import com.tactile.core.TickInput;
 import com.tactile.hook.TactileHooks;
@@ -379,6 +380,34 @@ public final class LiveEngine implements TactileHooks.MoveHandler
     private boolean stepped;
     private double stepTicks = 1.0D;
 
+    // ================================================================== server-side checks (1.1.0)
+
+    /** What the server most likely predicts from our packets (option "server-safe slime and knockback"). */
+    private final ServerShadow shadow = new ServerShadow();
+    /** Box sent with the last position packet: the onGround flag of the next one follows vanilla's rule from there. */
+    private Box lastPacketBox;
+    /**
+     * Option "server-safe slime and knockback", while slime is under the player: the engine runs on vanilla's tick timing
+     * (grid ticks aligned with the game clock, key changes at tick starts), as the server's movement check expects.
+     */
+    private boolean safeActive;
+
+    /** Key changes take effect only at step boundaries: STEPPED, or vanilla tick timing while {@link #safeActive}. */
+    private boolean steppedNow()
+    {
+        return stepped || safeActive;
+    }
+
+    private double stepTicksNow()
+    {
+        return safeActive ? 1.0D : stepTicks;
+    }
+
+    private boolean latchNow()
+    {
+        return safeActive || config.pressLatch;
+    }
+
     private String modeLabel()
     {
         return stepped ? "STEPPED " + Math.round(20.0D / stepTicks) + " Hz steps" : "EXACT";
@@ -392,7 +421,8 @@ public final class LiveEngine implements TactileHooks.MoveHandler
         if (config.mode == TactileConfig.Mode.VANILLA)
             return tag + EnumChatFormatting.WHITE + (config.enabled ? "VANILLA (20 Hz)" : "OFF (vanilla movement)");
         if (active && model != null)
-            return tag + EnumChatFormatting.GREEN + modeLabel() + EnumChatFormatting.GRAY + " active, input " + inputDescription;
+            return tag + EnumChatFormatting.GREEN + modeLabel() + EnumChatFormatting.GRAY + " active, input " + inputDescription
+                + (safeActive ? ", slime: vanilla tick timing" : "");
         return tag + EnumChatFormatting.YELLOW + config.mode + EnumChatFormatting.GRAY
             + " paused, vanilla movement: " + (fallbackReason != null ? fallbackReason : "starting");
     }
@@ -423,6 +453,7 @@ public final class LiveEngine implements TactileHooks.MoveHandler
         activeGeneration = config.generation;
         velocityQueue.clear();
         model = new SubstepModel(config.stepsPerTick(), config.contacts, true); // EXACT physics; STEPPED only steps the keys
+        model.instantAirControl = config.instantAirControl;
         stepped = config.mode == TactileConfig.Mode.STEPPED;
         stepTicks = 20.0D / Math.max(TactileConfig.MIN_STEP_RATE_HZ, config.stepRateHz);
         collision = new WorldCollision(mc.theWorld, player);
@@ -454,6 +485,10 @@ public final class LiveEngine implements TactileHooks.MoveHandler
             yaw.add((double)boundary - 1.0D, TickInput.fromKeyString("-------", player.rotationYaw, player.rotationPitch));
         }
         player.movementInput = hrInput;
+        mirror.packetFreeDy = 0.0D;
+        lastPacketBox = mirror.box;
+        shadow.reset(mirror);
+        safeActive = false;
         lastWritten = mirror.copy();
         active = true;
         fallbackReason = null;
@@ -515,8 +550,18 @@ public final class LiveEngine implements TactileHooks.MoveHandler
         mirror.usingItem = player.isUsingItem();
         // Undo the vanilla tick's own mutations (sprint rules, timers, cutoff) by restoring the boundary state.
         writeState(snapshot);
+        // The onGround flag of this packet, by vanilla's rule (Entity.moveEntity): the vertical part of the movement since
+        // the last packet was downward and was stopped. The engine commits contacts at its own grid-tick ends, which can
+        // fall between two packets (after a mid-tick jump), so its committed flag can disagree with the reported position.
+        boolean packetGround = lastPacketBox != null ? ServerShadow.packetOnGround(lastPacketBox, snapshot.box, snapshot.packetFreeDy)
+            : snapshot.onGround;
+        player.onGround = packetGround;
         lastWritten = snapshot.copy();
         sentState = snapshot.copy(); // what onUpdateWalkingPlayer sends to the server after this move
+        sentState.onGround = packetGround;
+        lastPacketBox = snapshot.box;
+        mirror.packetFreeDy = 0.0D;
+        if (config.serverSafeSlime) serverSafety(sentState);
         sentMirror = mirror.copy();
         sentModel = model.save();
         sentSubstepIndex = substepIndex;
@@ -532,6 +577,38 @@ public final class LiveEngine implements TactileHooks.MoveHandler
         prevBoundaryX = player.posX;
         prevBoundaryZ = player.posZ;
         return true;
+    }
+
+    /** Limit for adopting the server's expected motion: beyond it the server's view is not trusted (blocks per tick). */
+    private static final double SAFE_ADOPT_LIMIT = 0.1D;
+
+    /**
+     * Option "server-safe slime and knockback", at each packet. Keeps a copy of what the server most likely predicts.
+     * When slime comes under the player, switches to vanilla's tick timing at this tick boundary: the grid tick in
+     * progress ends here, a new one starts aligned with the game clock, and the motion becomes the one the server
+     * expects. Key changes then take effect at tick starts until the player is on the ground off slime. Measured offline
+     * (ServerCheck): every packet from the switch on matches the server's prediction exactly, bounces included.
+     */
+    private void serverSafety(PlayerState sent)
+    {
+        shadow.observe(sent, collision, player.rotationYaw, player.rotationPitch);
+        boolean slime = ServerShadow.slimeBelow(mirror, collision, 1.5D + 3.0D * Math.abs(mirror.motionY));
+        if (!safeActive && slime)
+        {
+            safeActive = true;
+            diag.safeActivations++;
+            PlayerState sv = shadow.state();
+            boolean adopt = Math.abs(sv.motionX - mirror.motionX) < SAFE_ADOPT_LIMIT && Math.abs(sv.motionY - mirror.motionY) < SAFE_ADOPT_LIMIT
+                && Math.abs(sv.motionZ - mirror.motionZ) < SAFE_ADOPT_LIMIT;
+            if (adopt) diag.safeAdoptMax = Math.max(diag.safeAdoptMax, Math.max(Math.abs(sv.motionX - mirror.motionX),
+                Math.max(Math.abs(sv.motionY - mirror.motionY), Math.abs(sv.motionZ - mirror.motionZ))));
+            model.overrideVelocity(mirror, collision, combined((double)(nextBoundary - 1) - 1e-9D),
+                adopt ? sv.motionX : mirror.motionX, adopt ? sv.motionY : mirror.motionY, adopt ? sv.motionZ : mirror.motionZ);
+        }
+        else if (safeActive && !slime && mirror.onGround)
+        {
+            safeActive = false;
+        }
     }
 
     // ================================================================== frames
@@ -577,6 +654,26 @@ public final class LiveEngine implements TactileHooks.MoveHandler
         renderReset = true;
         diag.replays++;
     }
+    /** Rewinds to the state of the last packet's boundary and replays up to where the engine was (pending velocities included). */
+    private void replayFromLastPacket()
+    {
+        long end = substepIndex;
+        mirror = sentMirror.copy();
+        model.restore(sentModel);
+        substepIndex = sentSubstepIndex;
+        replaying = true;
+        try
+        {
+            runSubstepsUntil((double)end / model.stepsPerTick);
+        }
+        finally
+        {
+            replaying = false;
+        }
+        writeToEntity();
+        diag.replays++;
+    }
+
     /** A/B measurement only: HRMOVE_CLICKSYNC=0 leaves the engine's boundary state on the entity during click handling. */
     private static final boolean CLICK_SYNC = !"0".equals(System.getenv("HRMOVE_CLICKSYNC"));
 
@@ -752,7 +849,7 @@ public final class LiveEngine implements TactileHooks.MoveHandler
             }
         }
         diag.recordBatch(System.nanoTime() - t0, (int)(substepIndex - before));
-        keys.pruneBefore((double)substepIndex / model.stepsPerTick - 1.0D - (stepped ? 2.0D * stepTicks : 0.0D)); // STEPPED reads up to two steps back
+        keys.pruneBefore((double)substepIndex / model.stepsPerTick - 1.0D - (steppedNow() ? 2.0D * Math.max(stepTicks, 1.0D) : 0.0D)); // STEPPED reads up to two steps back
         yaw.pruneBefore((double)substepIndex / model.stepsPerTick - 1.0D);
     }
 
@@ -951,7 +1048,7 @@ public final class LiveEngine implements TactileHooks.MoveHandler
      */
     private void substepExact(double tau, double end, boolean tickBoundary, double span)
     {
-        int nk = stepped ? stepsInside(tau, end) : keys.samplesInside(tau, end, keyTimes);
+        int nk = steppedNow() ? stepsInside(tau, end) : keys.samplesInside(tau, end, keyTimes);
         int ny = yaw.samplesInside(tau, end, yawTimes);
         // outside velocities (knockback) due in this stretch: one at or before its start applies at the start
         int nv = 0;
@@ -999,13 +1096,13 @@ public final class LiveEngine implements TactileHooks.MoveHandler
     /** STEPPED: step boundaries strictly inside (tau, end), written to keyTimes as piece starts. */
     private int stepsInside(double tau, double end)
     {
-        return InputTimeline.stepsInside(tau, end, stepTicks, keyTimes);
+        return InputTimeline.stepsInside(tau, end, stepTicksNow(), keyTimes);
     }
 
     private TickInput combined(double tau)
     {
         // STEPPED: the keys at the last step boundary, presses since the one before latched (InputTimeline.stepped)
-        TickInput k = stepped ? keys.stepped(tau, stepTicks, config.pressLatch) : keys.at(tau);
+        TickInput k = steppedNow() ? keys.stepped(tau, stepTicksNow(), latchNow()) : keys.at(tau);
         TickInput y = yaw.at(tau);
         return new TickInput(k.forward, k.back, k.left, k.right, k.jump, k.sneak, k.sprint, y.yaw, y.pitch);
     }
@@ -1186,8 +1283,23 @@ public final class LiveEngine implements TactileHooks.MoveHandler
             // A velocity set from outside (knockback): vanilla moves with it from its next tick, with that tick's friction.
             // The engine applies it at its arrival, starting a full tick there (SubstepModel.overrideVelocity), so the
             // knockback is vanilla's, started when it arrived. Never earlier than what is already simulated.
-            velocityQueue.add(new double[] {Math.max(tauAt(System.nanoTime()), (double)substepIndex / model.stepsPerTick),
-                player.motionX, player.motionY, player.motionZ});
+            double simulated = (double)substepIndex / model.stepsPerTick;
+            shadow.setVelocity(player.motionX, player.motionY, player.motionZ);
+            if (config.serverSafeSlime && sentMirror != null && sentModel != null && !replaying)
+            {
+                // Option "server-safe slime and knockback": as in vanilla, the next packet must already contain the
+                // knockback's first tick of movement (vanilla's tick moves ahead; the engine's packet covers the tick up to
+                // it). So the knockback applies from the last packet's boundary: rewind there and replay up to now. The
+                // grid tick it starts is aligned with the game clock.
+                velocityQueue.add(new double[] {(double)sentSubstepIndex / model.stepsPerTick, player.motionX, player.motionY, player.motionZ});
+                lastWritten.motionX = player.motionX;
+                lastWritten.motionY = player.motionY;
+                lastWritten.motionZ = player.motionZ;
+                diag.velocityOverrides++;
+                if (sentSubstepIndex < substepIndex) replayFromLastPacket();
+                return;
+            }
+            velocityQueue.add(new double[] {Math.max(tauAt(System.nanoTime()), simulated), player.motionX, player.motionY, player.motionZ});
             lastWritten.motionX = player.motionX;
             lastWritten.motionY = player.motionY;
             lastWritten.motionZ = player.motionZ;
@@ -1205,6 +1317,11 @@ public final class LiveEngine implements TactileHooks.MoveHandler
         adopted.jumpTicks = Math.max(adopted.jumpTicks, Math.min(mirror.jumpTicks, adopted.jumpTicks + 1.0D));
         mirror = adopted;
         lastWritten = mirror.copy();
+        // a teleport or correction: the server placed the player there (vanilla confirms it with a packet at once)
+        mirror.packetFreeDy = 0.0D;
+        lastPacketBox = mirror.box;
+        shadow.reset(mirror);
+        safeActive = false;
         renderReset = true; // do not interpolate across a teleport or correction
         if (moved)
         {
@@ -1235,6 +1352,13 @@ public final class LiveEngine implements TactileHooks.MoveHandler
      * START's boundary. With lead 1 it starts one tick later, because frames may already have simulated
      * part of the current interval.
      */
+    /**
+     * Test only (HRMOVE_SCRIPT_PHASE, 0 to 1): scripted key changes happen this far into each tick instead of at its
+     * start, to test packets with presses partway through a tick without simulated key presses.
+     */
+    private static final double SCRIPT_PHASE = System.getenv("HRMOVE_SCRIPT_PHASE") == null ? 0.0D
+        : Double.parseDouble(System.getenv("HRMOVE_SCRIPT_PHASE").trim());
+
     public void loadScript(List<TickInput> script, int lead)
     {
         if (!active) return;
@@ -1244,7 +1368,7 @@ public final class LiveEngine implements TactileHooks.MoveHandler
         for (int i = 0; i < script.size(); ++i)
         {
             TickInput in = script.get(i);
-            keys.add(start + i, in);
+            keys.add(start + i + SCRIPT_PHASE, in);
             yaw.add(start + i, in);
         }
         TickInput last = script.get(script.size() - 1);
@@ -1534,6 +1658,9 @@ public final class LiveEngine implements TactileHooks.MoveHandler
         public long pendingWaits, pendingWaitNanos;
         public long substepNanos;
         public double lastCorrection, maxCorrection;
+        /** Option "server-safe slime and knockback": switches to vanilla tick timing, and the largest motion change adopted. */
+        public long safeActivations;
+        public double safeAdoptMax;
         public String lastFallback = "-";
         private final long[] batchNanos = new long[4096];
         private final int[] batchSteps = new int[4096];
@@ -1606,6 +1733,9 @@ public final class LiveEngine implements TactileHooks.MoveHandler
             l.add(String.format("[TACTILE] corrections %d (last %.3f, max %.3f), velocity overrides %d, replays %d, fallbacks %d (last: %s)",
                 corrections, lastCorrection, maxCorrection, velocityOverrides, replays, fallbacks, lastFallback));
             l.add(String.format("[TACTILE] ticks that waited for a key event being read: %d (%.1f ms in total)", pendingWaits, pendingWaitNanos / 1e6));
+            if (e.config.serverSafeSlime)
+                l.add(String.format("[TACTILE] server-safe: %s, switches to tick timing %d, largest motion adopted %.5f, last server offset %.5f",
+                    e.safeActive ? "slime, vanilla tick timing" : "exact timing", safeActivations, safeAdoptMax, e.shadow.lastOffset()));
             return l;
         }
     }

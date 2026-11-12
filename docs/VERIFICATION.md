@@ -2,20 +2,21 @@
 
 This report explains how TACTILE was compared with the unmodified game, what was measured, and every known
 difference. All numbers in the results sections come from one test session on 2026-10-13 with the 1.0.0 build,
-unless a section says otherwise. Later additions, up to version 1.0.3, give their own date and version.
+unless a section says otherwise. Later additions, up to version 1.1.0, give their own date and version; the recorded
+scenarios of section 5 were recorded again with the 1.1.0 build on 2026-11-12.
 
 ## Summary
 
 TACTILE lets your movement keys take effect the moment you press them, instead of waiting for Minecraft's next game
 tick. The question this report answers is: **does it change anything else?**
 
-The short answer is no, apart from a few small, understood cases.
+The short answer is no: with the same key timing, TACTILE now gives exactly vanilla's movement.
 
 - We recorded the real, unmodified game doing 34 different things: walking, sprinting, jumping, sneaking at edges,
   stairs, water, lava, ladders, vines, soul sand, slime, cobwebs, creative flight, eating, bows and sword blocking.
-  We then played exactly the same key presses with TACTILE switched on. In 28 of the 34 the result was identical to
-  the last digit. The other six differ by between 6 mm and 11 cm, all for the same reason: a change of sprint in
-  mid-air takes effect sooner (D1 in section 8).
+  We then played exactly the same key presses with TACTILE switched on. In all 34 the result was identical to the last
+  digit (since 1.1.0; in 1.0.x, six differed by 6 mm to 11 cm, because a change of sprint in mid-air took effect
+  sooner than in vanilla).
 - Getting hit by a zombie or a player pushes you exactly as far as in vanilla (to six decimal places), and you see the
   push start about 3 ms after it arrives instead of 27-40 ms.
 - When you press jump, you see the jump start about 2 ms later. In vanilla it is about 30 ms on average, and up to
@@ -26,6 +27,9 @@ The short answer is no, apart from a few small, understood cases.
   is exactly the same as in vanilla.
 - Key reading only happens while the game window is in front. With the pause menu open, 20 simulated key presses
   reached TACTILE 0 times.
+- Servers with strict movement checks recompute every 50 ms tick of your movement with vanilla's rules, so a key
+  pressed between two ticks can make them pull you back. Section 13 measures this and the option that avoids it for
+  slime and knockback.
 
 The rest of this report is written for technical readers, but it does not assume you know how Minecraft's movement
 code works.
@@ -40,11 +44,13 @@ code works.
 6. [Other situations tested in the game](#6-other-situations-tested-in-the-game)
 7. [Timing](#7-timing)
 8. [Known differences](#8-known-differences)
-9. [Performance](#9-performance)
-10. [Privacy checks](#10-privacy-checks)
-11. [Fail-safe tests](#11-fail-safe-tests)
-12. [Limits of this verification](#12-limits-of-this-verification)
-13. [Reproducing the results](#13-reproducing-the-results)
+9. [Differences in earlier versions, and fixes](#9-differences-in-earlier-versions-and-fixes)
+10. [Performance](#10-performance)
+11. [Privacy checks](#11-privacy-checks)
+12. [Fail-safe tests](#12-fail-safe-tests)
+13. [Server movement checks](#13-server-movement-checks)
+14. [Limits of this verification](#14-limits-of-this-verification)
+15. [Reproducing the results](#15-reproducing-the-results)
 
 ## 1. How movement works in Minecraft 1.8.9
 
@@ -74,7 +80,7 @@ Distances in this report are in blocks. One block is one meter in the game.
 
 TACTILE keeps every rule of that update and changes only the timing:
 
-1. **Key times.** On Windows, each movement-key change arrives as an event with the time it happened. Section 10
+1. **Key times.** On Windows, each movement-key change arrives as an event with the time it happened. Section 11
    and the README's privacy section explain how this access is limited.
 2. **Movement between ticks.** For a given set of held keys, the per-tick update of speed and position can be written
    as an exact formula over time. TACTILE evaluates that formula at whatever moment it needs: the time of a key
@@ -139,10 +145,12 @@ does not start a new window. The movement formula changes from that moment, and 
 collision check on its whole movement. Vanilla has no equivalent either, since it would apply the key at the next
 tick; this is the purpose of the mod.
 
-**The one rule TACTILE applies sooner.** When sprint starts or stops in mid-air (for example because the player runs
-into a wall), vanilla changes the air acceleration only from the next tick, while TACTILE changes it at once. This is
-D1 in section 8, and it is the cause of every difference found in the recorded scenarios. Apart from these timing
-points, the rules are vanilla's.
+**Air acceleration after a sprint change.** When sprint starts or stops in mid-air (for example because the player
+runs into a wall), vanilla changes the air acceleration only from the next tick: it sets the value after a tick's move,
+for use during the next one. Since 1.1.0 TACTILE follows the same order: each window's air acceleration is fixed when
+the window begins. Up to 1.0.3 TACTILE changed it at once, which was the cause of every difference found in the
+recorded scenarios (D1 in section 9). A legacy setting, *Instant air control*, brings that behavior back. Apart from
+the timing points above, the rules are vanilla's.
 
 **Rules that keep a mid-tick jump fair.** A mid-tick jump is allowed only if the player was on the ground both when
 the current window began and at the moment of the press. With only the first condition, a player who walked off an
@@ -152,7 +160,9 @@ touchdown, sooner than vanilla's jump rhythm allows. Vanilla's jump cooldown als
 **What stays on the game clock.** Everything vanilla does at its own ticks that is not the player's movement keeps
 the game's 20 ticks per second: sending the player's position to the server, item use, and the world itself. When a
 game tick falls inside a collision window, the server receives the player's position at that moment, after collision
-with the movement so far.
+with the movement so far. Since 1.1.0 the packet's on-ground flag follows vanilla's own rule for the movement since the
+last packet (the downward part of the attempted move was stopped), rather than the contacts committed at the end of
+the last window; section 13 explains why.
 
 **Drawing.** Vanilla draws a blend between the last two tick results, so its game state runs up to one tick ahead
 of the screen. In the 1.0.0 test session, at about 1,000 frames per second, vanilla's game counted each landing about
@@ -188,29 +198,30 @@ frame, so game logic never sees the substitution.
 - **Not acceptable:** any difference from vanilla's movement rules. With the same key timing, positions, speeds,
   contacts and timers must equal vanilla's, apart from floating-point rounding (below 1e-9 blocks).
 - **Acceptable:** differences that come only from the finer timing (a key press or a contact change taking effect
-  sooner than the next tick), and the one case accepted by the project owner (D1 in section 8), with a measured upper
-  bound.
+  sooner than the next tick). Up to 1.0.3, one more case was accepted by the project owner, with a measured upper
+  bound: D1 in section 9, resolved in 1.1.0.
 
 ### Test setup
 
 - Windows 11, the development machine, Minecraft 1.8.9 with Forge 11.15.1.2318, in a flat test world generated by
   the recorder.
 - All runs in sections 4 to 11 used the 1.0.0 build, except where a section names another version and date: the
-  corner-clip test in section 6 (1.0.1), the re-examination of D2 in section 8, and the 1.0.3 tests in section 11. The
-  movement code is the same in all of these versions. The engine in the development build used for recording is the
-  same code as in the release jar; the release jar only leaves out the test tools (section 12).
+  corner-clip test in section 6 (1.0.1), the re-examination of D2 in section 9, the 1.0.3 tests in section 12, and the
+  1.1.0 recordings and tests in sections 5, 6 and 12 (2026-11-12). The movement code is the same from 1.0.0 to 1.0.3;
+  1.1.0 changed the air-acceleration order (D1) and the on-ground flag sent to the server. The engine in the development build used for recording is the
+  same code as in the release jar; the release jar only leaves out the test tools (section 14).
 - Simulated key presses for the timing tests were injected through Windows while the game window was in front.
   Latencies are measured from the moment Windows received the press, so the keyboard's own delay is not included.
 
 ### Raw data
 
 The raw recordings are not published, because the recording logs contain details of the test machine (user name and
-file paths). This report gives the aggregated results. Section 13 explains how to produce the recordings again.
+file paths). This report gives the aggregated results. Section 15 explains how to produce the recordings again.
 
 ## 4. Offline checks
 
-These run outside the game (`gradlew movementTests`, and the other tasks named in section 13). All passed on the
-1.0.0 code.
+These run outside the game (`gradlew movementTests`, and the other tasks named in section 15). All passed on the
+1.0.0 code, and again on the 1.1.0 code (2026-11-12) with the same results.
 
 | Check | What it shows | Result |
 |---|---|---|
@@ -229,60 +240,65 @@ A difference of 1e-12 blocks is a billionth of a millimeter: floating-point roun
 
 ## 5. Recorded scenarios
 
-Each scenario was recorded five times in the game on the 1.0.0 build: VANILLA, EXACT at physics rates 240 and 960,
-and STEPPED at 20 and 35 steps per second. The columns are:
+Each scenario was recorded in the game with VANILLA (1.0.0 session; vanilla's movement is unchanged since), and
+with the engine on the 1.1.0 build (2026-11-12): EXACT at physics rates 240 and 960, STEPPED at 20 steps per second,
+and EXACT 960 with the option *Server-safe slime and knockback*. STEPPED at 35 steps per second was recorded with 1.0.0
+(see below). The columns are:
 
 - **Model** (gate A): the reference model reproduces the recorded vanilla run.
 - **Engine** (gate L): the in-game engine produced exactly what the offline engine predicts for the same input. Run
-  for EXACT 240, EXACT 960 and STEPPED 20.
-- **vs vanilla**: the largest distance between TACTILE's and vanilla's position at any tick end, in blocks. EXACT 240,
-  EXACT 960 and STEPPED 20 gave the same value in every scenario, so one column is shown.
+  for every engine recording.
+- **vs vanilla**: the largest distance between TACTILE's and vanilla's position at any tick end, in blocks. All four
+  engine recordings gave the same value in every scenario, so one column is shown. **1.0.x** shows the 1.0.0 value
+  where it was not 0.
 
-| Scenario | What it does | Ticks | Model | Engine | vs vanilla |
-|---|---|---|---|---|---|
-| stand | Stand still and settle on the ground | 30 | identical | identical | 0 |
-| walk_stop | Walk, release, slide to a stop | 50 | identical | identical | 0 |
-| sprint_stop | Sprint, release, stop | 60 | identical | identical | 0 |
-| diag_strafe | Walk diagonally while strafing | 55 | identical | identical | 0 |
-| jump_in_place | Jump on the spot | 28 | identical | identical | 0 |
-| sprint_jump_chain | Repeated sprint jumps | 90 | identical | identical | 0 |
-| walk_off_ledge | Walk off a block edge and fall | 50 | identical | identical | 0 |
-| wall_scrape | Sprint along and into a wall | 50 | identical | identical | 0 |
-| slab_steps | Walk up half-slabs | 50 | identical | identical | 0 |
-| sneak_edge | Sneak to the edge of a block | 75 | identical | identical | 0 |
-| jump_onto_block | Jump up onto a one-block step | 44 | identical | identical | 0.0059 (D1) |
-| head_hitter | Jump under a low ceiling | 70 | identical | identical | 0 |
-| turning_jumps | Sprint jumps while turning | 75 | identical | identical | 0 |
-| double_tap_sprint | Start sprinting by double-tapping forward | 38 | identical | identical | 0 |
-| water_swim | Swim through water | 130 | identical | identical | 0 |
-| water_tread | Stay afloat in water | 97 | identical | identical | 0 |
-| lava_swim | Swim through lava | 140 | identical | identical | 0 |
-| ladder_climb | Climb and descend a ladder | 102 | identical | identical | 0 |
-| ladder_jump | Jump onto a ladder | 65 | identical | identical | 0 |
-| vine_climb | Climb vines | 60 | identical | identical | 0 |
-| soulsand_walk | Sprint and jump on soul sand | 65 | identical | identical | 0.1065 (D1) |
-| slime_bounce | Fall onto slime and bounce | 94 | identical | identical | 0 |
-| slime_walk_jump | Walk off onto slime, jump on it | 75 | identical | identical | 0 |
-| slime_sneak_land | Land on slime while sneaking (no bounce) | 62 | identical | identical | 0 |
-| web_walk | Walk through cobwebs | 110 | identical | identical | 0 |
-| fly_basic | Creative flight: up, down, across | 96 | identical | identical | 0 |
-| staircase_hold | Sprint-jump up a staircase, jump held | 80 | identical | identical | 0.0334 (D1) |
-| staircase_repress | Sprint-jump up a staircase, jump pressed each time | 80 | identical | identical | 0.0349 (D1) |
-| staircase_walk_repress | Walk up a staircase, jump pressed each time | 120 | identical | identical | 0 |
-| eat_walk | Eat while walking | 60 | identical | identical | 0 |
-| eat_sprint | Eat while sprinting (sprint ends), then resume | 65 | identical | identical | 0 |
-| eat_jump_doubletap | Start eating in the air; double-tap forward while eating | 65 | identical | identical | 0.0094 (D1) |
-| bow_strafe_shoot | Strafe while drawing a bow, shoot, jump while drawing | 71 | identical | identical | 0 |
-| sword_block_jump | Sprint-jump chain while blocking with a sword | 75 | identical | identical | 0.0481 (D1) |
+| Scenario | What it does | Ticks | Model | Engine | vs vanilla | 1.0.x |
+|---|---|---|---|---|---|---|
+| stand | Stand still and settle on the ground | 30 | identical | identical | 0 | |
+| walk_stop | Walk, release, slide to a stop | 50 | identical | identical | 0 | |
+| sprint_stop | Sprint, release, stop | 60 | identical | identical | 0 | |
+| diag_strafe | Walk diagonally while strafing | 55 | identical | identical | 0 | |
+| jump_in_place | Jump on the spot | 28 | identical | identical | 0 | |
+| sprint_jump_chain | Repeated sprint jumps | 90 | identical | identical | 0 | |
+| walk_off_ledge | Walk off a block edge and fall | 50 | identical | identical | 0 | |
+| wall_scrape | Sprint along and into a wall | 50 | identical | identical | 0 | |
+| slab_steps | Walk up half-slabs | 50 | identical | identical | 0 | |
+| sneak_edge | Sneak to the edge of a block | 75 | identical | identical | 0 | |
+| jump_onto_block | Jump up onto a one-block step | 44 | identical | identical | 0 | 0.0059 (D1) |
+| head_hitter | Jump under a low ceiling | 70 | identical | identical | 0 | |
+| turning_jumps | Sprint jumps while turning | 75 | identical | identical | 0 | |
+| double_tap_sprint | Start sprinting by double-tapping forward | 38 | identical | identical | 0 | |
+| water_swim | Swim through water | 130 | identical | identical | 0 | |
+| water_tread | Stay afloat in water | 97 | identical | identical | 0 | |
+| lava_swim | Swim through lava | 140 | identical | identical | 0 | |
+| ladder_climb | Climb and descend a ladder | 102 | identical | identical | 0 | |
+| ladder_jump | Jump onto a ladder | 65 | identical | identical | 0 | |
+| vine_climb | Climb vines | 60 | identical | identical | 0 | |
+| soulsand_walk | Sprint and jump on soul sand | 65 | identical | identical | 0 | 0.1065 (D1) |
+| slime_bounce | Fall onto slime and bounce | 94 | identical | identical | 0 | |
+| slime_walk_jump | Walk off onto slime, jump on it | 75 | identical | identical | 0 | |
+| slime_sneak_land | Land on slime while sneaking (no bounce) | 62 | identical | identical | 0 | |
+| web_walk | Walk through cobwebs | 110 | identical | identical | 0 | |
+| fly_basic | Creative flight: up, down, across | 96 | identical | identical | 0 | |
+| staircase_hold | Sprint-jump up a staircase, jump held | 80 | identical | identical | 0 | 0.0334 (D1) |
+| staircase_repress | Sprint-jump up a staircase, jump pressed each time | 80 | identical | identical | 0 | 0.0349 (D1) |
+| staircase_walk_repress | Walk up a staircase, jump pressed each time | 120 | identical | identical | 0 | |
+| eat_walk | Eat while walking | 60 | identical | identical | 0 | |
+| eat_sprint | Eat while sprinting (sprint ends), then resume | 65 | identical | identical | 0 | |
+| eat_jump_doubletap | Start eating in the air; double-tap forward while eating | 65 | identical | identical | 0 | 0.0094 (D1) |
+| bow_strafe_shoot | Strafe while drawing a bow, shoot, jump while drawing | 71 | identical | identical | 0 | |
+| sword_block_jump | Sprint-jump chain while blocking with a sword | 75 | identical | identical | 0 | 0.0481 (D1) |
 
 "Identical" means every recorded value (position, speed, contacts) is equal to the last bit in every tick.
 
-**STEPPED at 35 steps per second** differs from vanilla in most scenarios (largest 1.25 blocks, in staircase_hold).
+**STEPPED at 35 steps per second** (1.0.0) differs from vanilla in most scenarios (largest 1.25 blocks, in staircase_hold).
 This is expected: at 35 steps per second a key change takes effect at a different moment than vanilla's tick, so the
 player follows a different route. The offline checks in section 4 show that STEPPED applies the same movement rules
 as EXACT.
 
-**Hand-overs during recording.** Over the four engine runs there were 0 hand-overs to vanilla. The engine logged the
+**Hand-overs during recording.** Over the four 1.1.0 engine runs there were 0 hand-overs to vanilla. With the
+server-safe option on, the engine switched to vanilla tick timing 3 times, once in each slime scenario, and the motion
+it took over from the server emulation differed from its own by 0 (with keys at tick starts, the two are the same). The engine logged the
 recorder's own teleports between scenarios as outside position changes, as intended; none fell inside a recorded tick.
 
 ## 6. Other situations tested in the game
@@ -301,6 +317,11 @@ the knockback's arrival to the first frame that shows the player moving.
 Every trial in every mode pushed the same distance. Peak heights differ by up to 3 mm, only because the knockback
 starts mid-tick and tick ends sample the arc at a different point; the path itself is vanilla's.
 
+With the option *Server-safe slime and knockback* on (1.1.0, 2026-11-12), a knockback is applied from the last game
+tick instead, as vanilla's next packet expects (section 13). Every trial again pushed exactly vanilla's distance
+(1.984094 and 4.939078 blocks), and the first drawn movement came 1.8 to 1.9 ms after arrival in EXACT and STEPPED
+(VANILLA in the same run: 27.2 to 45.0 ms).
+
 ### Building straight up (pillaring)
 
 Jump and place a block under yourself, 10 blocks high. "Early" presses jump just before landing, "late" presses it
@@ -315,7 +336,7 @@ ran at 960 steps per second.
 
 All runs: 10 of 10 jumps, 0 lost presses, 0 ghost blocks, 0 position corrections from the server. With late presses
 TACTILE jumps at the press instead of at the next tick, so it is faster than vanilla's late timing, but never faster
-than vanilla's best timing (9.00). See D3 in section 8.
+than vanilla's best timing (9.00). See "Earlier response to presses" in section 8.
 
 ### Placing blocks while moving, and bridging
 
@@ -350,8 +371,9 @@ top.
 For the mid-tick presses, the run-up was shifted back by the extra sprint distance so each jump starts from the same
 spot as the vanilla jump it is compared with. The corner-clip count varies by about 1 % because the test observes
 positions on the game clock, which no longer coincides with the jump's own windows; whether the jump ends on top is
-identical. End positions differed by up to 3.6 cm in runs that hit the step's face: that is the mid-air sprint
-difference D1, and it never changed the outcome.
+identical. In 1.0.x, end positions differed by up to 3.6 cm in runs that hit the step's face: that was the mid-air
+sprint difference D1, and it never changed the outcome. Since 1.1.0 (rerun 2026-11-12) the end positions are identical
+too (largest difference 0.0000 at all three physics rates).
 
 ### Hand-overs and settings
 
@@ -427,7 +449,7 @@ window is the range of press times that make the jump.
 
 The latest working press is the same as vanilla's in every case. The window is smaller only at its early end: in
 vanilla, a press slightly too early is delayed to the next tick, which can rescue it. TACTILE acts on the press when
-it happens. See D3 in section 8.
+it happens. See "Earlier response to presses" in section 8.
 
 ### Short taps
 
@@ -449,17 +471,63 @@ tap length; "residual" compares each tap with the prediction for the length the 
 
 ## 8. Known differences
 
-### Accepted by the project owner
+These are the differences from vanilla in the current version. With the same key timing, TACTILE's movement is
+vanilla's (section 5); every difference below comes from the finer timing itself or from situations TACTILE leaves to
+vanilla. Differences found and resolved in earlier versions are in section 9.
 
-**D1. Sprint starting or stopping in mid-air.** In vanilla, a change of sprint state affects air acceleration from
-the next tick. TACTILE applies it from the moment it happens. This applies when sprint stops in the air (for example
-when you run into a wall or the face of a block, start eating or start blocking), and when it starts again (for
-example after leaving the wall, or when you stop eating or blocking while still holding forward and sprint).
-- Size: 5.9 mm (jump_onto_block) to 4.8 cm (sword_block_jump) in the recorded scenarios. Soul sand enlarges it to
-  10.7 cm, because its slowdown is applied per block and the player reaches the next block one tick sooner. In an
-  offline test of 400 jumps onto a step, 175 showed it, by at most 4.2 cm.
-- Cause: finer timing of a rule vanilla only checks once per tick. The rule itself is unchanged.
-- Decision: accepted (2026-10-12), as a difference that comes from the higher time resolution.
+### By design: timing
+
+**Earlier response to presses.** A press that vanilla would delay to the next tick acts at once. This changes some
+timing windows, always in the direction of "the press counts when you made it":
+- Long jumps: the latest working press is identical to vanilla; the earliest is about 24 ms later (section 7).
+- Pillaring with late jump presses: 9.37 ticks per block instead of vanilla's 9.90; with early presses, both are 9.00
+  (section 6).
+
+**Short taps count.** Taps that vanilla never sees are applied for their real length (section 7).
+
+**STEPPED at rates other than 20.** Key changes take effect at a different rhythm from vanilla's ticks, so routes
+differ, as intended. At 20 steps per second without short-tap keeping, STEPPED reads keys exactly where vanilla does
+(section 4).
+
+**Movement between game ticks in what the server receives.** TACTILE sends one position per game tick, as vanilla does,
+but when a key changes between two ticks, that packet contains movement no single vanilla tick produces. Vanilla's own
+server check does not notice; servers that replay every tick with vanilla's rules, such as Hypixel, can pull the player
+back (section 13). The option *Server-safe slime and knockback* removes this for slime and knockback; elsewhere it is
+the finer timing itself and cannot be removed without giving up the purpose of the mod. Accepted by the project owner
+(2026-11-12) after a play-test of 1.1.0 on Hypixel.
+
+### Handled by vanilla
+
+**Situations the engine does not run.** While riding an entity, flying on a ladder, in spectator mode, or under a
+potion effect added by another mod, TACTILE hands control to vanilla until the situation ends. Movement in these
+situations is vanilla's, with vanilla's timing.
+
+### Open
+
+None.
+
+## 9. Differences in earlier versions, and fixes
+
+These no longer apply to the current version. They are kept so that earlier results and the development log can be
+followed.
+
+### Differences that were resolved or withdrawn
+
+**D1 (resolved in 1.1.0): sprint starting or stopping in mid-air.** In vanilla, a change of sprint state affects air
+acceleration from the next tick: the value is set after a tick's move and used during the next. Up to 1.0.3, TACTILE
+applied it from the moment of the change. This happened when sprint stopped in the air (for example on running into a
+wall or the face of a block, or starting to eat or block) and when it started again.
+- Size in 1.0.x: 5.9 mm (jump_onto_block) to 4.8 cm (sword_block_jump) in the recorded scenarios; soul sand enlarged
+  it to 10.7 cm, because its slowdown is applied per block and the player reached the next block one tick sooner. In
+  an offline test of 400 jumps onto a step, 175 showed it, by at most 4.2 cm.
+- Decision history: accepted on 2026-10-12 as a difference of the finer timing. On re-examination (2026-11-12) it
+  turned out to be only the order in which vanilla applies a rule, not something the finer timing needs, so 1.1.0
+  follows vanilla's order: each internal tick's air acceleration is fixed when it begins. Key presses keep their exact
+  timing.
+- Result: all 34 recorded scenarios identical to vanilla (section 5); corner clip and jumps onto a step 0 difference.
+- Legacy: the setting *Instant air control (legacy, not vanilla)*, off by default, brings the 1.0.x behavior back. Its
+  tooltip warns that it changes vanilla's timing. With it on, the offline check (`gradlew serverCheck`, part 5)
+  reproduces the 1.0.x differences exactly.
 
 **D2 (withdrawn): clipping the corner of a ledge.** Earlier editions of this report listed a separate difference of up
 to 6 mm when jumping onto a block, blamed on TACTILE's smooth path between ticks. A tick-by-tick replay of
@@ -474,35 +542,13 @@ The label dated from an older version of the engine that did handle corners diff
 versions removed that difference, and the small residual kept its old name. The corner-clip test in section 6 confirms
 that collisions at corners match vanilla in every tested case.
 
-### By design: timing
-
-**D3. Earlier response to presses.** A press that vanilla would delay to the next tick acts at once. This changes some
-timing windows, always in the direction of "the press counts when you made it":
-- Long jumps: the latest working press is identical to vanilla; the earliest is about 24 ms later (section 7).
-- Pillaring with late jump presses: 9.37 ticks per block instead of vanilla's 9.90; with early presses, both are 9.00
-  (section 6).
-
-**D4. Short taps count.** Taps that vanilla never sees are applied for their real length (section 7).
-
-**D5. STEPPED at rates other than 20.** Key changes take effect at a different rhythm from vanilla's ticks, so routes
-differ, as intended. At 20 steps per second without short-tap keeping, STEPPED reads keys exactly where vanilla does
-(section 4).
-
-### Handled by vanilla
-
-**D6. Situations the engine does not run.** While riding an entity, flying on a ladder, in spectator mode, or under a
-potion effect added by another mod, TACTILE hands control to vanilla until the situation ends. Movement in these
-situations is vanilla's, with vanilla's timing.
-
-### Open
-
-None.
-
-### Fixed during development
+### Problems fixed during development
 
 | Version | Problem | Found by |
 |---|---|---|
-| 1.0.3 | On Lunar Client, which ships a newer JNA library, the key reader failed to load and TACTILE switched itself off. The key reader now uses a field present in every JNA version, and a key reader that cannot start falls back to the poller, then to reading keys once per frame (section 11). | User report ([issue #1](https://github.com/fallingsword/TACTILE/issues/1)) |
+| 1.1.0 | A change of sprint in mid-air changed the air acceleration at once instead of from the next tick (D1, up to 10.7 cm). | Re-examination of D1 |
+| 1.1.0 | The on-ground flag sent to the server could disagree with the reported position for one packet around a jump or landing partway through a tick. | Server-check research (section 13) |
+| 1.0.3 | On Lunar Client, which ships a newer JNA library, the key reader failed to load and TACTILE switched itself off. The key reader now uses a field present in every JNA version, and a key reader that cannot start falls back to the poller, then to reading keys once per frame (section 12). | User report ([issue #1](https://github.com/fallingsword/TACTILE/issues/1)) |
 | 1.0.1 | With chat messages switched off, F7 still printed the new mode in chat. | Play-testing |
 | 1.0.0 | A jump pressed mid-tick at the moment of hitting a wall while sprinting kept the sprint-jump boost briefly; the result depended on the physics rate by up to 2.4 mm. The sprint rules now run before such a jump, as in vanilla. | STEPPED rate check (gate S) |
 | 0.8.1 | Knockback pushed the player about 35 % too far: vanilla's ground friction on the first knockback tick was skipped. A knockback now starts a full tick when it arrives. | Hit test |
@@ -518,7 +564,7 @@ None.
 The development log, [RESULTS.md](RESULTS.md), records every measurement made during development in chronological
 order, including how each of these problems was found and fixed.
 
-## 9. Performance
+## 10. Performance
 
 Measured in the game during the scenario recordings of section 5 (about 2,600 ticks per run, uncapped frame rate):
 
@@ -533,13 +579,18 @@ At 960 steps per second (the fixed rate since 1.0.2), the engine uses about 3 ms
 core). A step at 240 per second costs more than one at 960 because it covers more distance, so its collision checks
 consider more blocks.
 
+The 1.1.0 recordings (2026-11-12) gave the same picture: 3.2 µs per step for EXACT 960, 4.9 µs for EXACT 240, 3.4 µs
+for STEPPED 20 and 2.8 µs for EXACT 960 with the server-safe option, with median frame times of 1.29 to 1.37 ms. With
+that option on, the server emulation also runs once per game tick (72 vanilla tick predictions, not part of the
+per-step time); its own cost was not measured separately.
+
 | Key reading | Processor use |
 |---|---|
 | Key events (default) | 0.17 % of one core |
 | Poller at 2000 per second | 4.6 % of one core in the game; 6-7 % in a separate benchmark |
 | Poller at 4000 or 8000 per second | a full core (it must busy-wait) |
 
-## 10. Privacy checks
+## 11. Privacy checks
 
 TACTILE reads keys through Windows Raw Input (or, if chosen, a poller using `GetAsyncKeyState`). The README describes
 the safeguards. These were checked on 1.0.0:
@@ -555,7 +606,7 @@ the safeguards. These were checked on 1.0.0:
   contains no code that writes key data or opens network connections; the test tools that record keys for the
   measurements in this report exist only in the development build.
 
-## 11. Fail-safe tests
+## 12. Fail-safe tests
 
 Errors were forced inside the engine on purpose (`HRMOVE_FAULTTEST`):
 
@@ -580,7 +631,101 @@ to call Windows functions) with JNA 5, which removed a field the key reader read
 
 After these tests, the project owner play-tested 1.0.3 on Lunar Client and confirmed that it works.
 
-## 12. Limits of this verification
+## 13. Server movement checks
+
+Added in 1.1.0 (research and tests on 2026-11-12). Players reported being pulled back ("rubber-banding") on Hypixel
+with TACTILE on, and slime bounces failing about half the time, while other servers were fine.
+
+### How servers check movement
+
+- **Vanilla's own server check is lenient.** It sets the player back only if the position the client reports is more
+  than 0.25 blocks horizontally from where the server's own collision puts it (a bug makes it ignore vertical
+  differences), if a single packet moves more than 10 blocks, or if the player ends up inside blocks. TACTILE's
+  differences never come near this, which is why plain servers are unaffected.
+- **Prediction-based checks are strict.** GrimAC (open source), recent versions of NoCheatPlus, and reportedly
+  Hypixel's Watchdog replay every 50 ms tick of the player's movement with vanilla's own rules. For each tick they try
+  every vanilla input (each direction, jump, sprint, sneak, item use; a jump is a yes or no for the whole tick) and keep
+  the prediction closest to the reported position. GrimAC's defaults flag a difference of 0.001 blocks, set the player
+  back at once for 0.1 blocks in a single tick, and otherwise once the differences add up to 1 block. They also check
+  the on-ground flag separately. A setback teleports the player, and the vanilla client then sets its speed to zero,
+  which is why a setback during a slime bounce kills the bounce.
+- **Why TACTILE trips them.** TACTILE sends one position per game tick, as vanilla does. When a key changes partway
+  through a tick, the movement in that packet is a mix that no single vanilla input produces: for example, a jump
+  pressed 0.3 of a tick in has risen about 0.30 blocks by the next packet instead of vanilla's 0.42. This is the
+  finer timing itself, so it cannot be removed without giving up the purpose of the mod.
+
+### Measured offline (`gradlew serverCheck`, 1.1.0)
+
+The check emulates a prediction-based server (class `ServerShadow`, the same code the option below uses in the game):
+from its own copy of the player's state it tries the 72 vanilla inputs for each tick and keeps the closest. With keys
+at tick starts, every packet in every scenario below gives 0. EXACT with keys changed partway through each tick
+(default settings):
+
+| Situation (packets) | Keys at +0.1 tick | +0.3 | +0.5 | +0.7 | +0.9 |
+|---|---|---|---|---|---|
+| Sprint, then bunny-hop with jump held (90) | 0.044 / 56 / 0 | 0.137 / 52 / 4 | 0.234 / 59 / 6 | 0.154 / 59 / 4 | 0.061 / 61 / 0 |
+| Horizontal keys only, no jumps (75) | 0.024 / 32 / 0 | 0.047 / 44 / 0 | 0.048 / 55 / 0 | 0.040 / 41 / 0 | 0.013 / 40 / 0 |
+| Sprint-jump onto slime, keep running (60) | 0.046 / 52 / 0 | 0.126 / 51 / 13 | 0.216 / 57 / 26 | 0.284 / 55 / 27 | 0.321 / 55 / 12 |
+
+Each cell: largest difference from the closest prediction (blocks) / packets flagged at 0.001 / packets at or above 0.1
+(an immediate setback in GrimAC's defaults). Jumps and slime bounces partway through a tick give the largest
+differences; horizontal keys alone stay below 0.05 but are flagged often, so under GrimAC-like rules they add up.
+
+**On-ground flag.** Up to 1.0.3 the packet carried the contacts TACTILE committed at the end of its last internal tick,
+which after a jump or landing partway through a tick disagreed with the reported position for one packet (about once
+per jump in each direction: "on the ground" while already rising, "in the air" while already standing). Since 1.1.0
+the flag is computed by vanilla's own rule for the movement since the last packet. Against vanilla's flag in all 34
+recorded scenarios, keys at tick starts: 2,477 ticks, 0 differences. With keys partway through a tick, the false flags
+are gone; a few packets (0 to 3 per run) still differ from the server's flag, because the server's closest prediction
+is itself off in those packets.
+
+**The option "Server-safe slime and knockback"** (Advanced settings, off by default). When slime comes under the player
+(the first solid block below the center, or the block stood on), the engine switches at the next game tick to vanilla's
+tick timing: its internal ticks are lined up with the game clock, the player's speed becomes the one the server
+emulation expects, and key changes take effect at tick starts. It switches back to exact timing once the player is on
+the ground off slime. Every knockback is applied from the last game tick, rewinding and replaying the short time since,
+so the next packet already contains the knockback's first tick, as vanilla's does.
+
+| Test (offline) | Without the option | With the option |
+|---|---|---|
+| Sprint-jump onto slime, jump pressed at +0.1 to +0.9 tick: packets from the switch on (41 to 42 per run) | see the slime row above | largest difference 0; 0 flagged; 0 flag differences, at every timing |
+| Knockback arriving at +0.1 / +0.5 / +0.9 tick (25 packets) | largest 0.056 / 0.233 / 0.481; 2 packets at or above 0.1 for +0.5 and +0.9 | 0 at every timing |
+
+The packets before the switch (the jump from stone) are not covered: a jump pressed partway through a tick anywhere
+else is still flagged.
+
+### Measured in the game (1.1.0, 2026-11-12)
+
+- **Fall damage.** The server works out fall damage from the reported positions and on-ground flags. Walking off a
+  platform onto stone, health lost: 8 blocks 3, 12 blocks 6, 16 blocks 11, 20 blocks 14, identical in VANILLA, EXACT
+  and EXACT with the option. (A first version of the test teleported the player into the air instead; it gave 6 and 7
+  at 12 blocks in different runs of vanilla alone, because the server ignores the first packets after a teleport.)
+- **Knockback with the option on:** distances identical to vanilla in every trial (section 6).
+- **Packets recorded with key changes at 0.37 of a tick**, run through the same emulation. Here the emulation is less
+  exact: it does not reproduce every vanilla detail of the recordings (it also reports differences for vanilla's own
+  recordings in 13 scenarios, such as ladders, item use and sneak-landing on slime), so the numbers are only useful
+  side by side. Packets flagged at 0.001, option off / on: slime_bounce 49 / 16, slime_walk_jump 25 / 9 (on-ground flag
+  differences 5 / 0); the remaining flags are mostly the packets before the switch. In slime_sneak_land the emulation
+  is unreliable even for vanilla, and the result is inconclusive.
+- **Recorded scenarios with the option on** (keys at tick starts): identical to vanilla in all 34 (section 5).
+
+**Play-test (project owner, 1.1.0):** slime bounces work with the option. On Hypixel, movement in general is still
+pulled back as before, as expected from the measurements above: jumps and other key changes between ticks are the
+finer timing itself. This is accepted as a known difference (section 8). Watchdog's rules are not public, so the
+comparison with it stays a play-test.
+
+Sources: GrimAC [README](https://raw.githubusercontent.com/GrimAnticheat/Grim/2.0/README.md),
+[PredictionEngine](https://raw.githubusercontent.com/GrimAnticheat/Grim/2.0/common/src/main/java/ac/grim/grimac/predictionengine/predictions/PredictionEngine.java),
+[OffsetHandler](https://raw.githubusercontent.com/GrimAnticheat/Grim/2.0/common/src/main/java/ac/grim/grimac/checks/impl/prediction/OffsetHandler.java),
+[default config](https://raw.githubusercontent.com/GrimAnticheat/Grim/2.0/common/src/main/resources/config/en.yml),
+[GroundSpoof](https://raw.githubusercontent.com/GrimAnticheat/Grim/2.0/common/src/main/java/ac/grim/grimac/checks/impl/prediction/GroundSpoof.java);
+NoCheatPlus [SurvivalFly](https://raw.githubusercontent.com/Updated-NoCheatPlus/NoCheatPlus/master/NCPCore/src/main/java/fr/neatmonster/nocheatplus/checks/moving/player/SurvivalFly.java);
+Hypixel forum posts on its prediction check ([1](https://hypixel.net/threads/thoughts-on-prediction-ac.5890691/),
+[2](https://hypixel.net/threads/explaining-prediction-anticheats.6011832/)) and on slime lagbacks
+([3](https://hypixel.net/threads/petition-fix-slime-jumping.3966580/)); vanilla 1.8.9's server check
+(`NetHandlerPlayServer.processPlayer`).
+
+## 14. Limits of this verification
 
 - **One machine, Windows only.** All measurements were made on the development machine. Other systems fall back to
   reading keys once per frame and were not tested.
@@ -592,12 +737,12 @@ After these tests, the project owner play-tested 1.0.3 on Lunar Client and confi
   ticks exactly, across all 34 scenarios. Situations outside these scenarios rely on the same code paths but were not
   recorded.
 - **Servers.** Play-testing on a multiplayer parkour server showed no problems. Servers with strict movement checks,
-  such as Hypixel, pull the player back repeatedly while TACTILE is on. No server's movement checks were tested
-  systematically.
+  such as Hypixel, pull the player back repeatedly while TACTILE is on. Section 13 measures this against an emulation
+  of such a check; on a real strict server, the server-safe option was only play-tested (slime bounces work).
 - **Other mods and clients.** OptiFine was play-tested, and 1.0.3 was play-tested on Lunar Client. No other mods or
   clients were tested.
 
-## 13. Reproducing the results
+## 15. Reproducing the results
 
 You need the source code, JDK 8, and Windows. Run every command from the project folder with `--offline` after the
 first build. The in-game recordings open a game window, run by themselves and close; those marked *focus* simulate
@@ -610,29 +755,36 @@ compares the reference model with them; without recordings it stops with "FAIL: 
 
 | Run | Environment variables |
 |---|---|
-| Vanilla | `HRMOVE_BASELINE=1 HRMOVE_BASELINE_SET=all HRMOVE_BASELINE_DIR=run/v100-vanilla` |
-| EXACT 960 | as above, `HRMOVE_BASELINE_DIR=run/v100-exact960 HRMOVE_MODE=EXACT HRMOVE_RATE=960 HRMOVE_INPUT=SCRIPTED` |
+| Vanilla | `HRMOVE_BASELINE=1 HRMOVE_BASELINE_SET=all HRMOVE_BASELINE_DIR=v100-vanilla` |
+| EXACT 960 | as above, `HRMOVE_BASELINE_DIR=v110-exact960 HRMOVE_MODE=EXACT HRMOVE_RATE=960 HRMOVE_INPUT=SCRIPTED` |
 | EXACT 240 | as above with `HRMOVE_RATE=240` and its own folder |
 | STEPPED 20 / 35 | `HRMOVE_MODE=STEPPED HRMOVE_STEP=20` (or `35`), `HRMOVE_RATE=960 HRMOVE_INPUT=SCRIPTED` and its own folder |
+| Server-safe option | as EXACT 960, plus `HRMOVE_SAFE=1` |
+| Keys partway through a tick (section 13) | as EXACT 960, plus `HRMOVE_SCRIPT_PHASE=0.37`, optionally `HRMOVE_SAFE=1`, and `HRMOVE_BASELINE_ONLY=<names>` |
+
+The folder in `HRMOVE_BASELINE_DIR` is relative to the game folder `run`, so `v100-vanilla` ends up in `run/v100-vanilla`.
 
 Then compare:
 ```
-gradlew liveValidation -Ptraces=run/v100-exact960 -Psteps=48 -Plead=1 -Pexact=true
-gradlew traceDiff -Pa=run/v100-vanilla -Pb=run/v100-exact960 -Plead=1
+gradlew liveValidation -Ptraces=run/v110-exact960 -Psteps=48 -Plead=1 -Pexact=true
+gradlew traceDiff -Pa=run/v100-vanilla -Pb=run/v110-exact960 -Plead=1
 ```
 (`-Psteps` is the physics rate divided by 20: 12 for 240, 48 for 960.)
 
-**2. Offline checks (section 4 and parts of sections 6 and 7),** using the vanilla recordings from step 1:
+**2. Offline checks (section 4 and parts of sections 6, 7 and 12),** using the recordings from step 1:
 ```
 gradlew movementTests -Ptraces=run/v100-vanilla
+gradlew serverCheck -Ptraces=run/v100-vanilla -Ppackets=run/v110-phase-exact,run/v110-phase-safe
 gradlew edgeLandingTest jumpWindowTest jitterTest exactTimingTest ladderViewCheck jumpLatencyCheck pollerBench cornerClipTest
 ```
 The tests in the second line do not need recordings.
 
-**3. In-game tests (sections 6, 7, 10, 11):**
+**3. In-game tests (sections 6, 7, 10, 11, 12):**
 - Hits, pillaring, placement, bridging, hand-overs: `HRMOVE_HITPROBE=1`, `HRMOVE_PILLARPROBE=1`,
   `HRMOVE_PLACEPROBE=1`, `HRMOVE_BRIDGEPROBE=1`, `HRMOVE_FLIGHTPROBE=1 HRMOVE_TOGGLETEST=4`, each with
   `HRMOVE_INPUT=SCRIPTED`.
+- Fall damage: `HRMOVE_FALLPROBE=1 HRMOVE_INPUT=SCRIPTED`. Knockback with the server-safe option: add `HRMOVE_SAFE=1`
+  to the hit probe.
 - Settings screen: `HRMOVE_UIPROBE=1`.
 - Forced errors: `HRMOVE_FAULTTEST=tick`, `frame`, `move` or `keys`; key sources failing to load: `keysinit`,
   `pollerinit` or `keysinit,pollerinit`.

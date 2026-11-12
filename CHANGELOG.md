@@ -4,7 +4,22 @@ All notable changes to TACTILE. Each entry summarizes the development log,
 [docs/RESULTS.md](docs/RESULTS.md), which lists every measurement behind these changes. Versions before 0.4.0 were
 called "High-Resolution Movement".
 
-## 1.0.3
+## 1.1.0 (2026-11-12)
+
+- **Vanilla's order for air acceleration.** When sprinting starts or stops in mid-air (for example when you run into a
+  wall, or start eating), vanilla changes the air acceleration from the next tick. TACTILE now does the same, from the
+  next of its internal ticks. Key presses keep their exact timing. With the same key timing, TACTILE now matches vanilla
+  exactly in all 34 recorded scenarios, up from 28: the mid-air sprint difference (up to 11 cm, "D1" in the
+  verification report) is gone. A legacy setting, *Instant air control*, brings the old behavior back.
+- **Truthful on-ground flag.** Each position packet now reports "on the ground" exactly as vanilla's own rule gives it
+  for the movement since the last packet. Before, around a jump or landing partway through a tick, the flag could
+  disagree with the reported position for one packet, which strict servers check separately.
+- **New option: Server-safe slime and knockback** (Advanced settings, off by default), for servers with strict movement
+  checks such as Hypixel. While slime is under you, TACTILE switches to vanilla's tick timing, so bounces match what the
+  server expects; every knockback is applied as vanilla applies it. Everywhere else, keys keep their exact timing.
+- New tests: `gradlew serverCheck` (how a prediction-based server check sees TACTILE's packets), a fall-damage probe.
+
+## 1.0.3 (2026-11-10)
 
 - **Fixed: Lunar Client** ([issue #1](https://github.com/fallingsword/TACTILE/issues/1)). Lunar Client replaces the
   JNA library that Minecraft uses to call Windows functions with a newer version (JNA 5), which no longer has a field

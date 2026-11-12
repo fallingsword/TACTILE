@@ -71,9 +71,14 @@ two copies cannot be loaded at the same time.
   changed under *Controls* > *TACTILE*.
 
 The first page has the main switch (*TACTILE movement* on or off), the overlay, and chat messages. The *Advanced
-settings* page has the mode, the step rate (STEPPED only), how keys are read, the poll rate (POLLER only) and the
-short-tap option (STEPPED only). Options that do not apply to your current choices are grayed out. Every option has a
-tooltip. Changes apply immediately, without restarting.
+settings* page has the mode, the step rate (STEPPED only), how keys are read, the poll rate (POLLER only), the
+short-tap option (STEPPED only), and two options that are off by default:
+- *Server-safe slime and knockback*: for servers with strict movement checks (see Compatibility below).
+- *Instant air control (legacy, not vanilla)*: brings back the behavior of 1.0.x, where a change of sprint in mid-air
+  changed the air acceleration at once rather than from the next tick, as vanilla does. Not recommended.
+
+Options that do not apply to your current choices are grayed out. Every option has a tooltip. Changes apply
+immediately, without restarting.
 
 Earlier versions also had a *physics rate* setting. It never changed how you move, so since 1.0.2 it is fixed
 internally at 960 per second. Collisions are always resolved by vanilla's own code on vanilla's 50 ms schedule. The
@@ -87,9 +92,15 @@ verification report explains in detail how ticks, jumps, collisions and drawing 
 - **Multiplayer:** works on servers that allow client mods of this kind (tested by play on a parkour server).
   Servers still check your movement, and many forbid mods that change movement. Read the rules of the server before
   you use TACTILE there.
-- **Incompatible servers:** servers with strict movement checks reject TACTILE's movement and pull you back
-  repeatedly ("rubber-banding"). **Hypixel is one of them**: with TACTILE switched on, movement is heavily
-  rubber-banded. Switch TACTILE off (F7 to VANILLA, or the main switch) on such servers.
+- **Servers with strict movement checks**, such as **Hypixel**, pull you back repeatedly ("rubber-banding") with
+  TACTILE switched on. Such servers recompute every 50 ms tick of your movement with vanilla's rules, from the inputs
+  vanilla allows, and pull you back when your reported position does not match. A key pressed between two ticks, which
+  is the point of TACTILE, produces positions vanilla's tick-by-tick rules cannot produce. Jumps pressed between ticks
+  are the largest such difference (up to about 0.3 blocks), and slime bounces and knockback the most likely to be pulled
+  back. The option *Server-safe slime and knockback* (Advanced settings) switches to vanilla's tick timing for slime and
+  knockback, which removes those cases; elsewhere you can still be pulled back. On these servers, switching TACTILE
+  off (F7 to VANILLA, or the main switch) avoids the problem entirely. Many such servers also forbid mods that change
+  movement in their rules.
 - **Operating systems:** precise key timing uses Windows. On other systems TACTILE reads keys once per rendered frame,
   so its timing is as fine as your frame rate.
 
@@ -98,14 +109,13 @@ verification report explains in detail how ticks, jumps, collisions and drawing 
 TACTILE was compared with the unmodified game in 34 recorded scenarios (walking, sprinting, jumping, sneaking at edges,
 staircases, water, lava, ladders, vines, soul sand, slime, cobwebs, creative flight, eating, bows and sword blocking),
 and in tests of getting hit, building straight up, placing blocks and bridging. With the same key timing, the results
-match vanilla exactly except for these known cases:
+match vanilla exactly in every one of them (since 1.1.0; before, sprint changes in mid-air differed by up to 11 cm).
 
-- **Sprint starting or stopping in mid-air** (for example, running into a wall or the side of a block during a jump,
-  or starting to eat while airborne). TACTILE applies the change in air acceleration immediately; vanilla applies it
-  one tick later. The effect was 0.6 to 5 cm in the tested cases, and 11 cm on soul sand, which enlarges it.
+The differences that remain come only from the finer timing itself:
 - **Earlier response.** Because a press is no longer delayed to the next tick, some timing windows change shape. For
   example, on a flat four-block sprint jump the latest moment you can press jump is identical to vanilla, while the
   earliest is about 24 ms later, because vanilla's tick delay forgives presses that come slightly too early.
+- **Short taps count.** A tap that vanilla would never see moves you for exactly as long as you held the key.
 
 These are explained, with measurements, in the verification report, [docs/VERIFICATION.md](docs/VERIFICATION.md).
 

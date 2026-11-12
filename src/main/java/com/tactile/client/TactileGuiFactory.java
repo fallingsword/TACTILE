@@ -80,12 +80,16 @@ public final class TactileGuiFactory implements IModGuiFactory
             movement.get("stepRateHz").setConfigEntryClass(RateEntry.Step.class);
             input.get("pollRateHz").setConfigEntryClass(RateEntry.Poll.class);
             input.get("pressLatch").setConfigEntryClass(DependentEntries.LatchEntry.class);
+            movement.get("serverSafeSlime").setConfigEntryClass(DependentEntries.SwitchEntry.class);
+            movement.get("instantAirControl").setConfigEntryClass(DependentEntries.SwitchEntry.class);
             List<IConfigElement> advanced = new ArrayList<IConfigElement>();
             advanced.add(new ConfigElement(movement.get("mode")));
             advanced.add(new ConfigElement(movement.get("stepRateHz")));
             advanced.add(new ConfigElement(input.get("inputSource")));
             advanced.add(new ConfigElement(input.get("pollRateHz")));
             advanced.add(new ConfigElement(input.get("pressLatch")));
+            advanced.add(new ConfigElement(movement.get("serverSafeSlime")));
+            advanced.add(new ConfigElement(movement.get("instantAirControl")));
             return advanced;
         }
     }

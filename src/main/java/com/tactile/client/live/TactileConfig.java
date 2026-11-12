@@ -69,6 +69,10 @@ public final class TactileConfig
     public boolean pressLatch = true;
     public Overlay overlay = Overlay.OFF;
     public boolean chatMessages = false;
+    /** Vanilla tick timing while slime is involved and for knockback (servers with strict movement checks). */
+    public boolean serverSafeSlime = false;
+    /** Legacy (before 1.1.0): a mid-air sprint change changes the air acceleration at once, not from the next tick. */
+    public boolean instantAirControl = false;
     /** Incremented whenever settings that the running engine depends on change. */
     public volatile int generation;
 
@@ -111,6 +115,21 @@ public final class TactileConfig
         physicsRateHz = DEFAULT_RATE_HZ;
         if (movement.containsKey("physicsRateHz")) movement.remove("physicsRateHz");
         stepRateHz = Math.max(MIN_STEP_RATE_HZ, Math.min(MAX_CONFIG_RATE_HZ, stepRateProp().getInt()));
+        serverSafeSlime = cfg.get(CAT_MOVEMENT, "serverSafeSlime", false,
+            "For servers with strict movement checks (for example Hypixel). Off by default.\n"
+            + "Such servers recompute every tick of your movement with vanilla's rules and pull you back when your position\n"
+            + "does not match. Slime bounces and knockback are where TACTILE's in-between-tick timing is most likely to cause that.\n"
+            + "When on: while slime is under you, and for every knockback, TACTILE switches to vanilla's tick timing (key presses\n"
+            + "take effect at the next tick; knockback at the next tick), matching what the server expects. Everywhere else,\n"
+            + "keys keep their exact timing.")
+            .setLanguageKey("tactile.config.serverSafeSlime").getBoolean();
+        instantAirControl = cfg.get(CAT_MOVEMENT, "instantAirControl", false,
+            "Not recommended: changes vanilla's timing. Off by default.\n"
+            + "In vanilla, when sprinting starts or stops in mid-air (for example when you run into a wall), the change in air\n"
+            + "acceleration takes effect from the next tick. TACTILE follows that rule. When on, the change takes effect at once,\n"
+            + "as in TACTILE 1.0.x. This moves you up to about 11 cm differently from vanilla in some jumps, and servers with\n"
+            + "strict movement checks can detect the difference.")
+            .setLanguageKey("tactile.config.instantAirControl").getBoolean();
 
         Property source = cfg.get(CAT_INPUT, "inputSource", "AUTO",
             "AUTO (recommended): key events where available (Windows), else the background poller, else once per frame.\n"
@@ -206,6 +225,8 @@ public final class TactileConfig
         if (legacy) stepRateHz = physicsRateHz; // HRMOVE_MODE=HIGH_RES: input resolution = physics rate, as before
         String step = System.getenv("HRMOVE_STEP");
         if (step != null && !step.trim().isEmpty()) stepRateHz = Integer.parseInt(step.trim());
+        if ("1".equals(System.getenv("HRMOVE_SAFE"))) serverSafeSlime = true;          // test: server-safe slime and knockback
+        if ("1".equals(System.getenv("HRMOVE_INSTANTAIR"))) instantAirControl = true;  // test: legacy air control
         String c = System.getenv("HRMOVE_CONTACTS");
         if (c != null && !c.trim().isEmpty()) contacts = com.tactile.core.SubstepModel.Contacts.valueOf(c.trim().toUpperCase());
         String i = System.getenv("HRMOVE_INPUT");

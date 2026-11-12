@@ -73,6 +73,14 @@ public final class PlayerState
     public double accX, accY, accZ;
     /** Friction of the grid tick, fixed at its start (vanilla evaluates it once per tick). */
     public float gridFriction;
+    /**
+     * Air acceleration of the grid tick, fixed at its start from the sprint state at that moment. Vanilla sets it after
+     * each tick's move and uses it during the next tick, so a change of sprint affects air acceleration from the next
+     * tick (EntityPlayer.onLivingUpdate).
+     */
+    public float gridAirAccel = 0.02F;
+    /** Free (unclipped) vertical displacement since the last position packet: vanilla's attempted dy, for onGround. */
+    public double packetFreeDy;
     /** Whether the grid tick uses ground parameters (vanilla: onGround at the tick start). */
     public boolean gridGround;
     /**
@@ -164,6 +172,8 @@ public final class PlayerState
         accY = o.accY;
         accZ = o.accZ;
         gridFriction = o.gridFriction;
+        gridAirAccel = o.gridAirAccel;
+        packetFreeDy = o.packetFreeDy;
         gridGround = o.gridGround;
         viewDX = o.viewDX;
         viewDY = o.viewDY;
@@ -216,6 +226,8 @@ public final class PlayerState
         s.accY = accY;
         s.accZ = accZ;
         s.gridFriction = gridFriction;
+        s.gridAirAccel = gridAirAccel;
+        s.packetFreeDy = packetFreeDy;
         s.gridGround = gridGround;
         s.viewDX = viewDX;
         s.viewDY = viewDY;

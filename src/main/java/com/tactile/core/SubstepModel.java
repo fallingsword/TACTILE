@@ -84,6 +84,12 @@ public final class SubstepModel
 
     public final boolean exact;
 
+    /**
+     * Legacy (before 1.1.0, setting "instant air control"): a change of sprint changes the air acceleration at once,
+     * not from the next grid tick as vanilla's order gives. Not vanilla timing; off by default.
+     */
+    public boolean instantAirControl;
+
     public int rateHz()
     {
         return 20 * stepsPerTick;
@@ -378,7 +384,9 @@ public final class SubstepModel
             }
             else if (gridFirstFlow == null || !gridFirstFlow.sameParams(f)) gridUniform = false;
             s.accX += f.dx(s);
-            s.accY += f.dy(s);
+            double freeDy = f.dy(s);
+            s.accY += freeDy;
+            s.packetFreeDy += freeDy;
             s.accZ += f.dz(s);
             // the motion just after a whole-tick move, before vanilla's post-move callbacks and drag (exact at N = 1)
             lastSegWhole = s.gridElapsed <= EPS && dt >= 1.0D - EPS;
@@ -441,7 +449,9 @@ public final class SubstepModel
         t.motionZ = gridStartMZ;
         Flow f1 = gridFirstFlow.at(1.0D);
         s.accX = f1.dx(t);
-        s.accY = f1.dy(t);
+        double wholeDy = f1.dy(t);
+        s.packetFreeDy += wholeDy - s.accY; // the whole tick in one step replaces the piecewise sum
+        s.accY = wholeDy;
         s.accZ = f1.dz(t);
         lastUx = f1.ux(t);
         lastUy = f1.uy(t);
@@ -522,6 +532,9 @@ public final class SubstepModel
      */
     private void beginGrid(PlayerState s, CollisionWorld world, boolean cutoff)
     {
+        // vanilla sets the air acceleration after a tick's move, from the sprint state then, for use in the next tick;
+        // here: the sprint state when the grid tick begins, before its own sprint rules run
+        s.gridAirAccel = VanillaModel.airAcceleration(s.sprinting);
         cutoffPending = cutoff;
         s.gridStartBox = s.box;
         s.gridStartOnGround = s.onGround;
@@ -599,11 +612,15 @@ public final class SubstepModel
         if (sneak && s.motionY < 0.0D) s.motionY = 0.0D;
     }
 
-    private static float landAcceleration(PlayerState s)
+    private float landAcceleration(PlayerState s)
     {
         float f4 = s.gridFriction;
         if (s.gridGround) return s.aiMoveSpeed() * (0.16277136F / (f4 * f4 * f4));
-        return s.gridMedium == PlayerState.FLY ? VanillaModel.flyAcceleration(s) : s.jumpMovementFactor;
+        if (s.gridMedium == PlayerState.FLY) return VanillaModel.flyAcceleration(s);
+        // Vanilla's order (1.1.0): the air acceleration fixed when the grid tick began, so a change of sprint inside it
+        // takes effect from the next grid tick, as vanilla's takes effect from the next tick. The legacy setting applies it
+        // at once (before 1.1.0: up to 11 cm from vanilla in the recorded scenarios, "D1").
+        return instantAirControl ? s.jumpMovementFactor : s.gridAirAccel;
     }
 
     /**

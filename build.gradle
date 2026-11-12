@@ -20,7 +20,7 @@ plugins {
     id "net.minecraftforge.gradle.forge" version "2.0.2"
 }
 */
-version = "1.0.3"
+version = "1.1.0"
 group= "com.tactile" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
 archivesBaseName = "tactile"
 
@@ -223,6 +223,15 @@ task jitterTest(type: JavaExec, dependsOn: classes) {
     classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
     main = 'com.tactile.harness.JitterTest'
     workingDir = project.file('run')
+}
+
+// How a prediction-based server movement check sees TACTILE's packets (onGround flag, offsets, the server-safe option).
+task serverCheck(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.ServerCheck'
+    workingDir = project.file('run')
+    args = [project.file(project.hasProperty('traces') ? project.property('traces') : 'run/hrm-baseline').absolutePath] +
+        (project.hasProperty('packets') ? project.property('packets').toString().split(',').collect { project.file(it).absolutePath } : [])
 }
 
 // Sprint-jumps at a one-block step: does vanilla's vertical-then-horizontal corner clip carry over (tick-start and mid-tick jumps)?

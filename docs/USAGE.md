@@ -18,11 +18,14 @@ files are migrated automatically: `hrmovement.cfg` (before 0.4.0), `inputSource=
 | `inputSource` | AUTO | AUTO: Windows key events, falling back to the poller, then to reading once per frame. EVENTS: key events; falls back to the poller if a movement key is bound to a mouse button or the key reader cannot start. POLLER: a background thread checks the movement keys at `pollRateHz`. FRAME: once per rendered frame. In every case, a source that cannot start falls back to the next one (poller, then once per frame); the detailed overlay shows which one is in use and why. |
 | `pollRateHz` | 2000 | POLLER only, 250 to 8000. Key changes are timed to within 1/rate. Above 2000 per second the poller must busy-wait, which occupies one processor core. |
 | `pressLatch` | true | STEPPED only. A tap that starts and ends between two steps still counts, for one step. |
+| `serverSafeSlime` | false | For servers with strict movement checks (see the README). While slime is under the player, key changes take effect at the next game tick and TACTILE's internal ticks are lined up with the game's, and every knockback is applied from the last game tick, as in vanilla. Everywhere else, keys keep their exact timing. |
+| `instantAirControl` | false | Legacy, not vanilla timing. A change of sprint in mid-air changes the air acceleration at once instead of from the next tick, as in 1.0.x (up to about 11 cm from vanilla in some jumps). |
 | `overlay` | OFF | Status overlay: OFF, SIMPLE or DETAILED (F8 cycles it). |
 | `chatMessages` | false | Show a chat message when the movement mode changes or movement falls back to vanilla. |
 
 The DETAILED overlay shows the active mode, how keys are read, and performance figures (time per
-step, frame times, corrections received from the server).
+step, frame times, corrections received from the server). With `serverSafeSlime` on, it also shows whether vanilla tick
+timing is in use, how often it was switched on, and how far the last packet was from the server's likely prediction.
 
 ## Developer tools
 
@@ -35,6 +38,10 @@ offline account, so it cannot join online servers.
   recordings from `run/hrm-baseline`, or from `-Ptraces=<folder>`.
 - `gradlew edgeLandingTest`, `jumpWindowTest`, `jitterTest`, `ladderViewCheck`, `jumpLatencyCheck`,
   `exactTimingTest`, `pollerBench`, `cornerClipTest`.
+- `gradlew serverCheck -Ptraces=<folder> [-Ppackets=<folder>,...]`: how a prediction-based server movement check sees
+  the packets TACTILE sends: the onGround flag against vanilla's in every recording, offsets with keys pressed partway
+  through a tick, the `serverSafeSlime` option for slime and knockback, and the legacy air-control setting. With
+  `-Ppackets`, it also checks the packets of in-game recordings.
 - `gradlew liveValidation -Ptraces=<folder> -Psteps=12 -Plead=1 -Pexact=true`: compares in-game recordings made with
   the engine against the offline model.
 - `gradlew traceDiff -Pa=<folder> -Pb=<folder> -Plead=1`: compares two sets of recordings tick by tick.
@@ -44,13 +51,16 @@ offline account, so it cannot join online servers.
   `HRMOVE_BASELINE_SET=all|medium|climb|items|fallback`, `HRMOVE_BASELINE_ONLY=<names>`, `HRMOVE_BASELINE_DIR=<folder>`,
   `HRMOVE_BASELINE_EFFECT=<potion:amplifier>`, `HRMOVE_BASELINE_FOOD=<level>`.
 - Add `HRMOVE_MODE=EXACT HRMOVE_RATE=240 HRMOVE_INPUT=SCRIPTED` to record with the engine (`HRMOVE_RATE` sets the internal physics rate, fixed at 960 for players, so the tests can check that it changes nothing)
-  (`HRMOVE_MODE=STEPPED HRMOVE_STEP=35` for STEPPED).
+  (`HRMOVE_MODE=STEPPED HRMOVE_STEP=35` for STEPPED). `HRMOVE_SAFE=1` turns on `serverSafeSlime`, `HRMOVE_INSTANTAIR=1`
+  turns on `instantAirControl`, and `HRMOVE_SCRIPT_PHASE=<0 to 1>` moves the scripted key changes that far into each
+  tick (for testing presses partway through a tick).
 
 **Probes in the game:**
 - `HRMOVE_HITPROBE=1`: knockback from a zombie, a player and a sprinting player.
 - `HRMOVE_PILLARPROBE=1`: building straight up, per mode and press timing.
 - `HRMOVE_PLACEPROBE=1`, `HRMOVE_BRIDGEPROBE=1`: block placement while moving, and bridging.
 - `HRMOVE_FLIGHTPROBE=1`, `HRMOVE_TRANSPROBE=1`: hand-overs between TACTILE and vanilla.
+- `HRMOVE_FALLPROBE=1`: fall damage from 4, 8, 12 and 16 blocks in VANILLA, EXACT and EXACT with `serverSafeSlime`.
 - `HRMOVE_FAULTTEST=tick|frame|move|keys`: forces an internal error to check that the game keeps running.
   `keysinit`, `pollerinit` or `keysinit,pollerinit`: the key reader and/or the poller fail while loading (as with an
   incompatible JNA), to check the fallback to the next key source.
