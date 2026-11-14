@@ -20,7 +20,7 @@ plugins {
     id "net.minecraftforge.gradle.forge" version "2.0.2"
 }
 */
-version = "1.1.0"
+version = "1.2.0"
 group= "com.tactile" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
 archivesBaseName = "tactile"
 
@@ -235,6 +235,13 @@ task serverCheck(type: JavaExec, dependsOn: classes) {
 }
 
 // Sprint-jumps at a one-block step: does vanilla's vertical-then-horizontal corner clip carry over (tick-start and mid-tick jumps)?
+// Windows from rest (1.2.0, SubstepModel.restPhase): coyote-time consistency and jump rhythm vs 1.1, offline.
+task inputPhaseTest(type: JavaExec, dependsOn: classes) {
+    classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
+    main = 'com.tactile.harness.InputPhaseTest'
+    workingDir = project.file('run')
+}
+
 task cornerClipTest(type: JavaExec, dependsOn: classes) {
     classpath = sourceSets.main.output + sourceSets.main.runtimeClasspath
     main = 'com.tactile.harness.CornerClipTest'

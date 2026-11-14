@@ -4,6 +4,17 @@ All notable changes to TACTILE. Each entry summarizes the development log,
 [docs/RESULTS.md](docs/RESULTS.md), which lists every measurement behind these changes. Versions before 0.4.0 were
 called "High-Resolution Movement".
 
+## 1.2.0 (2026-11-13)
+
+- **Consistent coyote time from a standing start.** TACTILE's collision windows (the 50 ms steps in which contacts
+  such as leaving an edge are decided, as vanilla decides them each tick) now also start at the first movement key
+  you press while standing still, as they already did at every jump. A run from standstill to an edge now gets the
+  same coyote time every time, set only by the distance, as in vanilla. Before, the millisecond at which you started
+  the run could change it anywhere from none to 49 ms. Key presses while moving still never move the windows, so
+  tapping a key before an edge gains nothing. The README's new section "If you optimize your timing" explains what
+  sets the windows.
+- New test: `gradlew inputPhaseTest`.
+
 ## 1.1.0 (2026-11-12)
 
 - **Vanilla's order for air acceleration.** When sprinting starts or stops in mid-air (for example when you run into a

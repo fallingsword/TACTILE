@@ -38,6 +38,8 @@ offline account, so it cannot join online servers.
   recordings from `run/hrm-baseline`, or from `-Ptraces=<folder>`.
 - `gradlew edgeLandingTest`, `jumpWindowTest`, `jitterTest`, `ladderViewCheck`, `jumpLatencyCheck`,
   `exactTimingTest`, `pollerBench`, `cornerClipTest`.
+- `gradlew inputPhaseTest`: coyote time at an edge and the jump rhythm, for vanilla, EXACT as in 1.1 and EXACT now
+  (windows starting at the first key pressed from standing still, `SubstepModel.restPhase`).
 - `gradlew serverCheck -Ptraces=<folder> [-Ppackets=<folder>,...]`: how a prediction-based server movement check sees
   the packets TACTILE sends: the onGround flag against vanilla's in every recording, offsets with keys pressed partway
   through a tick, the `serverSafeSlime` option for slime and knockback, and the legacy air-control setting. With

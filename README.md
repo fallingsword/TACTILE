@@ -116,8 +116,28 @@ The differences that remain come only from the finer timing itself:
   example, on a flat four-block sprint jump the latest moment you can press jump is identical to vanilla, while the
   earliest is about 24 ms later, because vanilla's tick delay forgives presses that come slightly too early.
 - **Short taps count.** A tap that vanilla would never see moves you for exactly as long as you held the key.
+- **Coyote time after key changes on the move.** See the next section.
 
 These are explained, with measurements, in the verification report, [docs/VERIFICATION.md](docs/VERIFICATION.md).
+
+## If you optimize your timing
+
+TACTILE keeps vanilla's 50 ms *collision windows*: within a window, things like leaving an edge, landing or touching a
+wall are decided once, at its end, just as vanilla decides them once per tick. Only where the windows start differs.
+Worth knowing if you practice precise timings:
+
+- **What starts a window:** a jump, a knockback, starting to fly up or down, and the first movement key you press while
+  standing completely still. Key presses while you are moving or in the air never move the windows.
+- **Walking off an edge:** you can still jump for a moment after your feet leave the block, until that window ends:
+  0 to 50 ms, the same "coyote time" vanilla gives. From a standing start, how much you get depends only on how far
+  from the edge you started, exactly as in vanilla.
+- **After a jump or a key change while moving:** the exact millisecond of those presses changes your run, and so where
+  the window ends when you reach an edge. The coyote time at that edge can then differ between attempts by up to
+  50 ms, where vanilla gives the same for every press within one tick (it rounds presses to ticks, which is the delay
+  TACTILE removes). If you want vanilla's consistency, STEPPED at 20 per second without short-tap keeping rounds
+  presses like vanilla.
+- **Tapping a key before an edge does not buy coyote time**, and **no key trick makes a jump fire sooner after a
+  landing** than vanilla allows. Both were tested.
 
 ## Transparency and privacy
 

@@ -2,7 +2,7 @@
 
 This report explains how TACTILE was compared with the unmodified game, what was measured, and every known
 difference. All numbers in the results sections come from one test session on 2026-10-13 with the 1.0.0 build,
-unless a section says otherwise. Later additions, up to version 1.1.0, give their own date and version; the recorded
+unless a section says otherwise. Later additions, up to version 1.2.0, give their own date and version; the recorded
 scenarios of section 5 were recorded again with the 1.1.0 build on 2026-11-12.
 
 ## Summary
@@ -135,15 +135,27 @@ After the jump, the windows line up with the jump exactly as vanilla's ticks lin
 so the jump's path and every collision along it are vanilla's, started at the press. Section 6 includes a test of
 vanilla's corner clip (clearing the top corner of a block thanks to the vertical-first order), which TACTILE
 reproduces in every case, including with mid-tick presses. A knockback or a flight push (starting to fly up or down)
-starts a new window in the same way. Windows stay aligned to the latest such event until the next one.
+starts a new window in the same way, and so does a movement key pressed while standing still (since 1.2.0; see
+below). Windows stay aligned to the latest such event until the next one.
 
 Step 1 is the only part of a mid-tick jump with no vanilla equivalent: vanilla never ends a tick early. It covers at
 most 50 ms of movement, collision-checked by the same rules. It is where the earlier timing of a press takes effect.
 
-**Other key changes during a window.** A key that changes in the middle of a window (anything other than a jump)
-does not start a new window. The movement formula changes from that moment, and the window still ends with one
-collision check on its whole movement. Vanilla has no equivalent either, since it would apply the key at the next
-tick; this is the purpose of the mod.
+**Starting from standing still.** Since 1.2.0, a movement key pressed while the player stands completely still on the
+ground (no horizontal speed) starts a new window at the press, as a jump does. The window in progress ends there with
+its contacts committed; nothing has moved during it, so nothing changes but the timing of later windows. A run from
+standstill then has the same windows relative to its own start, wherever that start falls between two game ticks. In
+vanilla the run's first key acts at a tick start, so its ticks are lined up with the run in the same way. Up to 1.1.0
+the windows kept the game's tick phase (or the last jump's), so the same run from the same spot could get anywhere
+from 0 to 49 ms of coyote time at an edge, depending on the millisecond the run began (section 7, "Coyote time at an
+edge").
+
+**Other key changes during a window.** A key that changes in the middle of a window while the player is moving
+(anything other than a jump) does not start a new window. The movement formula changes from that moment, and the
+window still ends with one collision check on its whole movement. Vanilla has no equivalent either, since it would
+apply the key at the next tick; this is the purpose of the mod. A version in which every key change started a window
+was tested and rejected: a 1 ms tap of any key just before an edge then bought the largest possible coyote time every
+time (section 7).
 
 **Air acceleration after a sprint change.** When sprint starts or stops in mid-air (for example because the player
 runs into a wall), vanilla changes the air acceleration only from the next tick: it sets the value after a tick's move,
@@ -208,8 +220,13 @@ frame, so game logic never sees the substitution.
 - All runs in sections 4 to 11 used the 1.0.0 build, except where a section names another version and date: the
   corner-clip test in section 6 (1.0.1), the re-examination of D2 in section 9, the 1.0.3 tests in section 12, and the
   1.1.0 recordings and tests in sections 5, 6 and 12 (2026-11-12). The movement code is the same from 1.0.0 to 1.0.3;
-  1.1.0 changed the air-acceleration order (D1) and the on-ground flag sent to the server. The engine in the development build used for recording is the
-  same code as in the release jar; the release jar only leaves out the test tools (section 14).
+  1.1.0 changed the air-acceleration order (D1) and the on-ground flag sent to the server. 1.2.0 changed only when a
+  window starts after standing still; it was tested offline (section 7, "Coyote time at an edge", 2026-11-13), and
+  every offline check of section 4 was rerun on it with unchanged results. With inputs at tick starts, as in the
+  recorded scenarios, a window already starts at every such press, so nothing changes there: replaying the recordings
+  offline gave 0.0000 from vanilla in 34 of 34, as before. The engine in the development
+  build used for recording is the same code as in the release jar; the release jar only leaves out the test tools
+  (section 14).
 - Simulated key presses for the timing tests were injected through Windows while the game window was in front.
   Latencies are measured from the moment Windows received the press, so the keyboard's own delay is not included.
 
@@ -451,6 +468,32 @@ The latest working press is the same as vanilla's in every case. The window is s
 vanilla, a press slightly too early is delayed to the next tick, which can rescue it. TACTILE acts on the press when
 it happens. See "Earlier response to presses" in section 8.
 
+### Coyote time at an edge (1.2.0)
+
+Offline (`gradlew inputPhaseTest`, 2026-11-13), EXACT at 960 per second. *Coyote time* is how long after the player's
+box has fully left a block a jump still works; *overhang* is how far past the edge the box is at that last working
+jump. Both are decided by where a window boundary falls after the box leaves the block (section 2), so they can be 0
+to 50 ms (0 to 27.5 cm at sprint speed). 1.1 is the behavior before 1.2.0.
+
+| Test | VANILLA | EXACT 1.1 | EXACT 1.2 |
+|---|---|---|---|
+| 1. Sprint from standing still toward an edge, the run started at each 1 ms offset within a tick; 10 start spots. Spread of the overhang over the offsets, per spot | 0 cm | 27.4 cm on average (0 to 27.5 cm at every spot) | 0 cm |
+| 1. Overhang at each spot | 2.3 to 27.6 cm, set by the distance | — | equal to vanilla's at every spot (within 0.1 cm, the test's 1 ms step) |
+| 2. Jump in place, sprint-forward pressed in mid-air at each 1 ms offset, land, run to the edge. Spread, per spot | 0 cm | 20.4 cm on average | 20.4 cm on average (unchanged) |
+| 3. Second jump after a landing, fresh press or space held, with or without a 1 ms tap of A anywhere around the touchdown | 12 ticks | 12 ticks | 12 ticks; a tap never makes it sooner |
+| 4. Best overhang a 1 ms tap of A just before the edge can give, standing start | — | no gain | no gain |
+
+- **Standing starts:** the coyote time now depends only on the distance from the edge, exactly as in vanilla. Before,
+  the millisecond at which the run began could change it from none to the full 50 ms.
+- **Key changes while moving** (test 2): unchanged. Pressing a key 1 ms later really changes the run in TACTILE, so the
+  edge is reached at a slightly different moment, and the window boundary falls elsewhere relative to it. Vanilla is
+  consistent here only because it rounds every press to a tick, which is the delay TACTILE removes; no choice of
+  window start can make this case consistent without rounding keys again. STEPPED at 20 per second (without
+  short-tap keeping) reads keys where vanilla does, and so is consistent in the same way.
+- **Rejected alternative:** letting every key change start a window. Measured with a prototype in the same test: it
+  fixed standing starts equally, did not help test 2 (20.2 cm), and a 1 ms tap of A just before the edge gave the
+  largest overhang (27.5 cm) at every start spot, where vanilla gives it only when the tick phase happens to be lucky.
+
 ### Short taps
 
 One tap of the forward key, 10 to 20 taps per length. "Model" is the offline engine's prediction for the requested
@@ -485,6 +528,12 @@ timing windows, always in the direction of "the press counts when you made it":
 
 **Short taps count.** Taps that vanilla never sees are applied for their real length (section 7).
 
+**Coyote time after key changes on the move.** How long a jump still works after walking off an edge (0 to 50 ms) is
+decided by where a window boundary falls, as in vanilla. From a standing start it depends only on the distance, as in
+vanilla (since 1.2.0). After key changes while moving, or during a jump, it also depends on the exact milliseconds of
+those presses, where vanilla's tick rounding makes it the same for every press within a tick (section 7, test 2).
+See "If you optimize your timing" below.
+
 **STEPPED at rates other than 20.** Key changes take effect at a different rhythm from vanilla's ticks, so routes
 differ, as intended. At 20 steps per second without short-tap keeping, STEPPED reads keys exactly where vanilla does
 (section 4).
@@ -495,6 +544,30 @@ server check does not notice; servers that replay every tick with vanilla's rule
 back (section 13). The option *Server-safe slime and knockback* removes this for slime and knockback; elsewhere it is
 the finer timing itself and cannot be removed without giving up the purpose of the mod. Accepted by the project owner
 (2026-11-12) after a play-test of 1.1.0 on Hypixel.
+
+### If you optimize your timing
+
+TACTILE keeps vanilla's 50 ms collision windows: within a window, contacts (standing, leaving an edge, landing, touching
+a wall) are decided once, at its end, as vanilla decides them once per tick. Only where the windows start differs. For
+players who practice precise timings:
+
+- **What starts a window.** A jump, a knockback, starting to fly up or down, and the first movement key pressed while
+  standing completely still. Nothing else: key presses while moving or in the air never move the windows. The game's
+  own ticks are used until the first of these.
+- **Walking off an edge.** You can still jump until the end of the window in which your box left the block, the same
+  coyote time vanilla gives (0 to 50 ms). From a standing start, how much you get depends only on how far you started
+  from the edge, as in vanilla; the moment you start does not matter.
+- **After a jump or a key change on the move.** The exact milliseconds of those presses change your run, and with it
+  where the window boundary falls when you reach an edge. So the coyote time at that edge can vary between attempts by
+  up to 50 ms, where vanilla would give the same for every press within the same tick. This is the price of not
+  rounding presses to ticks. STEPPED at 20 per second, without short-tap keeping, rounds them like vanilla if you want
+  vanilla's consistency.
+- **Taps do not buy coyote time.** Tapping a key just before an edge does not move the windows (tested; section 7).
+- **The jump rhythm is vanilla's.** After a landing, a jump never fires sooner than vanilla allows, whatever keys you
+  press around the touchdown (section 7). A held jump fires at the landing and starts the next windows itself, so a
+  bunny-hop chain keeps the windows of its first jump.
+- **The latest working jump before an edge** is the same moment as in vanilla for the same windows (section 7, "Jump
+  timing windows").
 
 ### Handled by vanilla
 
@@ -546,6 +619,7 @@ that collisions at corners match vanilla in every tested case.
 
 | Version | Problem | Found by |
 |---|---|---|
+| 1.2.0 | From a standing start, the coyote time at an edge depended on the millisecond the run began relative to the game's ticks (0 to 49 ms for the same run from the same spot). A key pressed while standing still now starts a window (section 2). | Project owner's question about jump windows |
 | 1.1.0 | A change of sprint in mid-air changed the air acceleration at once instead of from the next tick (D1, up to 10.7 cm). | Re-examination of D1 |
 | 1.1.0 | The on-ground flag sent to the server could disagree with the reported position for one packet around a jump or landing partway through a tick. | Server-check research (section 13) |
 | 1.0.3 | On Lunar Client, which ships a newer JNA library, the key reader failed to load and TACTILE switched itself off. The key reader now uses a field present in every JNA version, and a key reader that cannot start falls back to the poller, then to reading keys once per frame (section 12). | User report ([issue #1](https://github.com/fallingsword/TACTILE/issues/1)) |
@@ -775,7 +849,7 @@ gradlew traceDiff -Pa=run/v100-vanilla -Pb=run/v110-exact960 -Plead=1
 ```
 gradlew movementTests -Ptraces=run/v100-vanilla
 gradlew serverCheck -Ptraces=run/v100-vanilla -Ppackets=run/v110-phase-exact,run/v110-phase-safe
-gradlew edgeLandingTest jumpWindowTest jitterTest exactTimingTest ladderViewCheck jumpLatencyCheck pollerBench cornerClipTest
+gradlew edgeLandingTest jumpWindowTest jitterTest exactTimingTest ladderViewCheck jumpLatencyCheck pollerBench cornerClipTest inputPhaseTest
 ```
 The tests in the second line do not need recordings.
 

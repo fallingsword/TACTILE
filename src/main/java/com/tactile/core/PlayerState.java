@@ -81,6 +81,8 @@ public final class PlayerState
     public float gridAirAccel = 0.02F;
     /** Free (unclipped) vertical displacement since the last position packet: vanilla's attempted dy, for onGround. */
     public double packetFreeDy;
+    /** The movement keys of the previous piece as bits (-1 = none yet), to detect a key change from standing still. */
+    public int prevKeys = -1;
     /** Whether the grid tick uses ground parameters (vanilla: onGround at the tick start). */
     public boolean gridGround;
     /**
@@ -174,6 +176,7 @@ public final class PlayerState
         gridFriction = o.gridFriction;
         gridAirAccel = o.gridAirAccel;
         packetFreeDy = o.packetFreeDy;
+        prevKeys = o.prevKeys;
         gridGround = o.gridGround;
         viewDX = o.viewDX;
         viewDY = o.viewDY;
@@ -228,6 +231,7 @@ public final class PlayerState
         s.gridFriction = gridFriction;
         s.gridAirAccel = gridAirAccel;
         s.packetFreeDy = packetFreeDy;
+        s.prevKeys = prevKeys;
         s.gridGround = gridGround;
         s.viewDX = viewDX;
         s.viewDY = viewDY;

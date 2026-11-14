@@ -90,6 +90,22 @@ public final class SubstepModel
      */
     public boolean instantAirControl;
 
+    /**
+     * Windows from rest (1.2.0): a movement-key change while standing still on the ground (no horizontal motion, in a window
+     * that began on the ground) starts a new grid tick at that instant, as a jump does. A run from standstill then has the
+     * same windows relative to its start, wherever the start falls, so the coyote time at an edge depends only on the
+     * distance, as in vanilla (where the run's first key acts at a tick start). Key changes while moving do not move the
+     * windows: letting any key change do it let a 1 ms tap just before an edge buy the largest coyote time on demand
+     * (measured, RESULTS Phase 28). Always on; the field exists only so tests can measure the earlier behavior.
+     */
+    public boolean restPhase = true;
+
+    private static int keyBits(TickInput in)
+    {
+        return (in.forward ? 1 : 0) | (in.back ? 2 : 0) | (in.left ? 4 : 0) | (in.right ? 8 : 0) | (in.jump ? 16 : 0)
+            | (in.sneak ? 32 : 0) | (in.sprint ? 64 : 0);
+    }
+
     public int rateHz()
     {
         return 20 * stepsPerTick;
@@ -339,6 +355,15 @@ public final class SubstepModel
         applyPendingCutoff(s, in);
         float strafe = moveStrafe * 0.98F;
         float forward = moveForward * 0.98F;
+
+        // Windows from rest: a movement-key change while standing still on the ground starts a grid tick at this instant
+        // (see restPhase). Only in a window that began on the ground, so a landing is never committed early.
+        int keys = keyBits(in);
+        boolean keyChange = s.prevKeys >= 0 && keys != s.prevKeys;
+        s.prevKeys = keys;
+        if (restPhase && keyChange && landLike(s) && s.onGround && s.gridStartOnGround && s.motionX == 0.0D && s.motionZ == 0.0D
+            && s.gridElapsed > EPS)
+            restartGridNow(s, world, in, moveForward);
 
         // Input-driven jump at the substep start. Vanilla allows a jump only at tick starts, with onGround from
         // the previous move. A press inside a grid tick therefore needs both: grounded when this grid tick began
